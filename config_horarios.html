@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<!-- =======================================================================
+ * ⚙️ config_horarios.html – Interfaz de Configuración (NASE 2026)
+ * ----------------------------------------------------------------------
+/**
+ * @summary Interfaz Visual para ajustar tiempos de recargo.
+ * @description Formulario Web dentro de Google Sheets para definir qué rango horario
+ *              se considera "Nocturno" (con recargo salarial) para el cálculo de Horas Extras.
+ *
+ * @features
+ *   - 🎛️ **Configuración Horaria:** Define Hora Inicio (ej: 19) y Hora Fin (ej: 6).
+ *   - 🧹 **Código Limpio:** Se eliminaron los campos de porcentajes (%).
+ *   - 💾 **Persistencia:** Guarda en `ScriptProperties` del proyecto.
+ *   - 🔔 **Feedback:** Alertas visuales de éxito o error.
+ *
+ * @dependencies
+ *   - Backend: `ConfigHorarios.gs` (Funciones: `actualizarConfiguracionHorarios`, `obtenerConfiguracionHorarios`).
+ *   - Librerías: Bootstrap 5 (Estilo), SweetAlert2 (Alertas).
+ *
+ * @author NASE Team
+ * @version 2.1 (Simplificado - Solo Tiempos)
+ ======================================================================= -->
+
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Configuración de Horarios</title>
+  
+  <!-- Bootstrap + Alerts -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
+  <!-- ======================================================================
+   * 🎨 ESTILOS CSS
+   * ====================================================================== -->
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      padding: 20px; 
+      background-color: #f6f8fb;
+    }
+    
+    .config-card { 
+      background: white; 
+      border-radius: 16px; 
+      padding: 30px; 
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    
+    .form-label { 
+      font-weight: 600; 
+      color: #17365D; 
+      margin-bottom: 8px; 
+    }
+    
+    .form-control { 
+      font-size: 1.1rem;
+      padding: 10px;
+      text-align: center;
+      font-weight: 600;
+    }
+    
+    .btn-custom { 
+      min-height: 46px; 
+      font-size: 16px; 
+      font-weight: 500; 
+      border-radius: 10px; 
+      width: 100%;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<!-- ======================================================================
+ * 📐 ESTRUCTURA HTML
+ ====================================================================== -->
+<body>
+  <div class="container">
+    <div class="config-card">
+      <!-- 1. TÍTULO -->
+      <h2 class="text-center mb-4" style="color: #17365D;">⚙️ Configuración de Horarios (Tiempo)</h2>
+      <p class="text-center text-muted small">
+        Define las horas para el cálculo del recargo nocturno en turnos.
+        <br>Este ajuste aplica al cálculo de Horas Extras.
+      </p>
+      
+      <!-- 2. FORMULARIO -->
+      <form id="formConfig">
+        <div class="row g-3">
+          <!-- INPUT: Hora Inicio -->
+          <div class="col-md-6">
+            <label class="form-label">Hora Inicio Nocturno (0-23)</label>
+            <input type="number" id="horaInicio" class="form-control" min="0" max="23" required>
+            <small class="text-muted">Valor estándar: 19 (7:00 PM)</small>
+          </div>
+          
+          <!-- INPUT: Hora Fin -->
+          <div class="col-md-6">
+            <label class="form-label">Hora Fin Nocturno (0-23)</label>
+            <input type="number" id="horaFin" class="form-control" min="0" max="23" required>
+            <small class="text-muted">Valor estándar: 6 (6:00 AM)</small>
+          </div>
+          
+          <!-- NOTA: No se incluyen inputs monetarios -->
+          
+          <!-- 3. BOTONES DE ACCIÓN -->
+          <div class="col-12 text-center mt-4">
+            <button type="submit" class="btn btn-success btn-custom">
+              💾 Guardar Horarios
+            </button>
+            <button type="button" class="btn btn-secondary btn-custom" onclick="cargarConfigActual()">
+              🔄 Cargar Actual
+            </button>
+            <button type="button" class="btn btn-warning btn-custom" onclick="restablecerDefecto()">
+              ⚠️ Restablecer Default
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<!-- ======================================================================
+ * 🧠 LÓGICA JAVASCRIPT
+ ====================================================================== -->
+  <script>
+    /**
+     * @summary Evento: Guardar Configuración.
+     * @description Captura las horas, las envía al backend y muestra alerta.
+     */
+    document.getElementById('formConfig').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      // Objeto de configuración (Solo horas)
+      const config = {
+        horaInicio: parseInt(document.getElementById('horaInicio').value, 10),
+        horaFin: parseInt(document.getElementById('horaFin').value, 10)
+      };
+
+      // Alerta de carga
+      Swal.fire({ title: 'Guardando...', didOpen: () => Swal.showLoading() });
+
+      // Llamada al backend
+      google.script.run
+        .withSuccessHandler(function(res) {
+          Swal.close();
+          if (res.status === 'ok') {
+            Swal.fire('Éxito', res.message, 'success');
+          } else {
+            Swal.fire('Error', res.message, 'error');
+          }
+        })
+        .withFailureHandler(function(err) {
+          Swal.close();
+          Swal.fire('Error', err.message, 'error');
+        })
+        .actualizarConfiguracionHorarios(config);
+    });
+
+    /**
+     * @summary Cargar configuración actual desde el servidor.
+     */
+    function cargarConfigActual() {
+      Swal.fire({ title: 'Cargando...', didOpen: () => Swal.showLoading() });
+      
+      google.script.run
+        .withSuccessHandler(function(config) {
+          Swal.close();
+          document.getElementById('horaInicio').value = config.horaInicio;
+          document.getElementById('horaFin').value = config.horaFin;
+        })
+        .withFailureHandler(function(err) {
+          Swal.close();
+          Swal.fire('Error', err.message, 'error');
+        })
+        .obtenerConfiguracionHorarios();
+    }
+
+    /**
+     * @summary Restablecer a valores por defecto.
+     */
+    function restablecerDefecto() {
+      Swal.fire({
+        title: '¿Restablecer horarios por defecto?',
+        text: 'Esto volverá a poner las horas a 19:00 - 06:00.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, restablecer',
+        cancelButtonText: 'Cancelar'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          // Ejecutar reset
+          google.script.run
+            .withSuccessHandler(function(res) {
+              Swal.fire('Éxito', res.message, 'success');
+              cargarConfigActual(); // Reflejar cambios en pantalla
+            })
+            .withFailureHandler(function(err) {
+              Swal.fire('Error', err.message, 'error');
+            })
+            .restablecerConfiguracionPorDefecto();
+        }
+      });
+    }
+
+    // ==================================================================
+    // INICIALIZACIÓN
+    // ==================================================================
+    /**
+     * @summary Al cargar el DOM, trae los valores guardados actualmente.
+     */
+    document.addEventListener('DOMContentLoaded', cargarConfigActual);
+  </script>
+</body>
+</html>
