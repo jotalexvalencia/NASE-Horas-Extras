@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
+  <title>NASE - Registro</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    :root { --bg: #f6f8fb; --card: #fff; --primary: #0b6efd; --success: #198754; --text-color: #17365D; }
+    html, body { margin:0; padding:0; width:100%; height:100%; font-family: 'Poppins', Arial, Helvetica, sans-serif; overflow: hidden; background-color: var(--bg); }
+    body { display: flex; justify-content: center; align-items: center; }
+    .app-card { background: var(--card); width:100%; max-width: 420px; padding: 20px; text-align: center; box-sizing: border-box; border-radius: 16px; box-shadow: 0 6px 20px rgba(0,0,0,.08); display: flex; flex-direction: column; justify-content: center; min-height: 500px; }
+    @media (max-width: 576px) { html, body { background-color: #fff; } .app-card { max-width: 100%; height: 100%; width: 100%; border-radius: 0; box-shadow: none; padding: 30px 20px; } .app-card > div { flex: 1; display: flex; flex-direction: column; justify-content: center; } }
+    .logo { width: 200px; margin: 0 auto 20px; display: block; }
+    .welcome-text { font-size: 22px; font-weight: 600; color: var(--text-color); margin-bottom: 30px; line-height: 1.3; }
+    .btn-arrow { width: 100%; padding: 16px; font-size: 20px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border-radius: 12px; }
+    .camera-box { border: 2px dashed #ccc; border-radius: 16px; background: #fafafa; margin-bottom: 20px; position: relative; overflow: hidden; width: 100%; height: 300px; display: flex; justify-content: center; align-items: center; }
+    .camera-video { width: 100%; height: 100%; object-fit: cover; }
+    .face-guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 160px; height: 220px; border: 3px solid #fff; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; pointer-events: none; opacity: 0.7; z-index: 10; box-shadow: 0 0 0 9999px rgba(0,0,0,0.3); }
+    .camera-box.photo-taken { display: none; }
+    #photoPreview { display: none; width: 100%; max-width: 100%; border-radius: 16px; margin-bottom: 20px; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.1); cursor: pointer; transition: transform 0.2s; max-height: 400px; }
+    #photoPreview:hover { transform: scale(1.02); }
+    .step-guide { font-family: 'Poppins', sans-serif; font-size: 50px; color: var(--text-color); margin: 0 auto 10px; font-weight: 600; line-height: 1; }
+    h5 { font-family: 'Poppins', sans-serif; font-weight: 600; color: var(--text-color); margin-bottom: 20px; font-size: 22px; }
+    .btn { min-height: 54px !important; font-size: 18px !important; border-radius: 12px; }
+    #cedula { font-size: 24px !important; padding: 14px !important; min-height: 60px; border-radius: 12px; letter-spacing: 2px; }
+    .card-option { border: 2px solid #e9ecef; border-radius: 16px; transition: all 0.2s; }
+    .card-option:active { transform: scale(0.98); }
+    .card-option.border-success { border-color: #198754 !important; background-color: #f0fff4; border-width: 3px; }
+    @media screen and (orientation: portrait) { .camera-box { height: 400px; } #photoPreview { max-height: 500px; } }
+    @media screen and (orientation: landscape) { .camera-box { height: 250px; } #photoPreview { max-height: 300px; } }
+    @media (max-width: 576px) { .camera-box { height: 300px; } #photoPreview { max-height: 400px; } }
+  </style>
+</head>
+<body>
+  <!-- INYECCIÓN DE DATOS -->
+  <script>
+    var DATA_CENTROS = (function(){
+      try {
+        return JSON.parse('<?!= centrosInyectados ?>') || {};
+      } catch(e) {
+        console.warn("Centros no cargados", e);
+        return {};
+      }
+    })();
+  </script>
+
+  <!-- PANTALLAS -->
+  <div class="app-card">
+    <div id="screen0">
+      <div>
+        <img src="https://raw.githubusercontent.com/jotalexvalencia/NASE/main/Logo_Nase.png" alt="NASE" class="logo">
+        <div class="welcome-text">Inicie su marcación<br>de entrada o de<br>salida.</div>
+        <button class="btn btn-success btn-arrow" onclick="showScreen(1)">
+          <span>Iniciar</span>
+          <svg width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div id="screen1" style="display:none">
+      <div>
+        <div class="step-guide">1</div>
+        <h5>Tome su registro</h5>
+        <div class="camera-box" id="cameraBox">
+          <video id="cameraVideo" class="camera-video" autoplay playsinline></video>
+          <div class="face-guide"></div>
+        </div>
+        <img id="photoPreview" style="display:none;">
+        <button class="btn btn-success w-100 mb-3" id="btnTomarFoto" onclick="takePhoto()">
+          <span style="font-size:24px; margin-right:8px;">📷</span> Tomar foto
+        </button>
+        <div id="photoStatus" class="small text-muted"></div>
+      </div>
+    </div>
+
+    <div id="screen2" style="display:none">
+      <div>
+        <div class="step-guide">2</div>
+        <h5>Digite Cédula</h5>
+        <div class="input-group mb-3">
+          <input type="tel" id="cedula" class="form-control text-center" maxlength="12" inputmode="numeric">
+          <button class="btn btn-success" type="button" id="btnBuscar" onclick="buscarEmpleado()" style="width: 60px;">
+            <svg width="24" height="24" fill="white" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 1 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 1 1 11 0z"/></svg>
+          </button>
+        </div>
+        <div id="statusBusqueda" class="small text-muted mb-2" style="display:none;">Buscando…</div>
+        <div id="infoEmpleado" style="display:none; margin-bottom:20px; padding:16px; background:#f8f9fa; border-radius:12px; font-size:16px;"></div>
+        <button class="btn btn-success w-100 d-flex align-items-center justify-content-center" id="nextAfterCedula" disabled onclick="showScreen(3)">
+          Siguiente <svg width="20" height="20" fill="currentColor" class="ms-2" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div id="screen3" style="display:none">
+      <div>
+        <div class="step-guide">3</div>
+        <h5>Marque<br>Entrada o Salida</h5>
+        <div class="row g-3 mb-4">
+          <div class="col-6">
+            <div class="card text-center p-3 card-option" onclick="selectTipo('Entrada')" style="cursor:pointer" id="cardEntrada">
+              <img src="https://raw.githubusercontent.com/jotalexvalencia/NASE/1cda612aff2938adc5c496eab3079db3bcc47b35/Entrada.png" width="150" class="mx-auto mb-3">
+              <div class="form-check d-flex justify-content-center">
+                <input class="form-check-input" type="radio" name="tipo" value="Entrada" id="entradaRadio">
+                <label class="form-check-label ms-2 fw-bold" for="entradaRadio">Entrada</label>
+              </div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="card text-center p-3 card-option" onclick="selectTipo('Salida')" style="cursor:pointer" id="cardSalida">
+              <img src="https://raw.githubusercontent.com/jotalexvalencia/NASE/1cda612aff2938adc5c496eab3079db3bcc47b35/salida.png" width="150" class="mx-auto mb-3">
+              <div class="form-check d-flex justify-content-center">
+                <input class="form-check-input" type="radio" name="tipo" value="Salida" id="salidaRadio">
+                <label class="form-check-label ms-2 fw-bold" for="salidaRadio">Salida</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-success w-100 d-flex align-items-center justify-content-center" onclick="showScreen(4)">
+          Siguiente <svg width="20" height="20" fill="currentColor" class="ms-2" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div id="screen4" style="display:none">
+      <div>
+        <div class="step-guide">4</div>
+        <h5>Ubicación</h5>
+        <button class="btn btn-outline-success w-100 mb-4 d-flex align-items-center justify-content-center" onclick="getLocationAndCheck()" style="height: 60px;">
+          <svg width="24" height="24" fill="currentColor" class="me-2" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 0 0-6 3 3 0 1 0 0 6z"/></svg>
+          Obtener ubicación
+        </button>
+        <div id="locationStatus" class="text-muted mb-4 fw-bold"></div>
+        <input type="checkbox" id="acepto" checked style="display:none;">
+        <div class="text-center text-muted small mb-3" style="font-size:14px; line-height:1.5;">
+          Al marcar el botón verde acepta la política de tratamiento de datos de Nase Colombia.<br>
+          <a href="https://nasecolombia.com/wp-content/uploads/2024/06/PO-GH-001-6-POLITICA-PROTECCION-DE-DATOS-NASE.pdf" target="_blank" style="color:#0b6efd;text-decoration:none;font-weight:bold;">Descargar política completa</a>
+        </div>
+        <button class="btn btn-success w-100 d-flex align-items-center justify-content-center" onclick="intentarEnviarRegistro()" style="height: 64px; font-size: 19px !important;">
+          Registrar <svg width="24" height="24" fill="currentColor" class="ms-2" viewBox="0 0 16 16"><path d="M8.97 1.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 1 1-1.08.02L2.324 9.12a.75.75 0 1 1 1.06-1.06l2.94 2.939L8.97 2.03a.75.75 0 1 1 1.05 0z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // VARIABLES GLOBALES
+    let fotoBase64 = '', fotoUrl = '';
+    let currentPosition = null;
+    let ciudadDetectada = '', centroDetectado = null;
+    let currentStream = null;
+    let videoWidth = 480, videoHeight = 640;
+    let isUploading = false, pendingRegistration = false;
+
+    // NAVEGACIÓN
+    function showScreen(n) {
+      if (n === 4) {
+        const ced = document.getElementById('cedula').value.trim();
+        const tipoSelectedInput = document.querySelector('[name="tipo"]:checked');
+        const tipoSeleccionado = tipoSelectedInput ? tipoSelectedInput.value : null;
+
+        if (!ced) {
+          Swal.fire('⚠️ Ingresa tu cédula', '', 'warning');
+          return;
+        }
+
+        if (!tipoSeleccionado) {
+          Swal.fire('⚠️ Selecciona Entrada o Salida', '', 'warning');
+          return;
+        }
+
+        Swal.fire({
+          title: 'Validando secuencia...',
+          allowOutsideClick: false,
+          didOpen: function() { Swal.showLoading(); }
+        });
+
+        google.script.run
+          .withSuccessHandler(function(res) {
+            Swal.close();
+            if (res.esValido) {
+              cambiarPantalla(4);
+            } else {
+              Swal.fire({
+                icon: 'error',
+                title: 'Secuencia incorrecta',
+                html: '<p style="font-size:16px;margin-bottom:15px;">' + res.message + '</p><p style="color:#666;font-size:14px;">Por favor selecciona: <strong style="color:#0b6efd;">' + (res.tipoSugerido === 'entrada' ? 'ENTRADA' : 'SALIDA') + '</strong></p>',
+                confirmButtonText: 'Entendido',
+                confirmButtonColor: '#0b6efd'
+              }).then(function() {
+                if (res.tipoSugerido) {
+                  selectTipo(res.tipoSugerido === 'entrada' ? 'Entrada' : 'Salida');
+                }
+              });
+            }
+          })
+          .withFailureHandler(function(err) {
+            Swal.close();
+            Swal.fire('❌ Error de conexión', err.message, 'error');
+          })
+          .validarSecuenciaFront(ced, tipoSeleccionado.toLowerCase());
+
+        return;
+      }
+      cambiarPantalla(n);
+    }
+
+    function cambiarPantalla(n) {
+      var screens = document.querySelectorAll('[id^="screen"]');
+      for (var i = 0; i < screens.length; i++) {
+        screens[i].style.display = 'none';
+      }
+      document.getElementById('screen' + n).style.display = 'block';
+      if (n === 1) startCameraLive();
+      if (n === 2) setTimeout(function() { document.getElementById('cedula').focus(); }, 300);
+      if (n === 3) warmUpGPS();
+    }
+
+    // CÁMARA
+    function warmUpGPS() {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(function(pos) { currentPosition = pos; }, function() {}, {enableHighAccuracy: true, maximumAge: 60000, timeout: 10000});
+    }
+
+    function startCameraLive() {
+      var video = document.getElementById('cameraVideo');
+      var isPortrait = window.innerHeight > window.innerWidth;
+      var constraints = { video: { facingMode: 'user', width: isPortrait ? {ideal: 480} : {ideal: 640}, height: isPortrait ? {ideal: 640} : {ideal: 480} } };
+      
+      navigator.mediaDevices.getUserMedia(constraints)
+        .then(function(stream) { 
+          currentStream = stream; 
+          video.srcObject = stream; 
+          video.play(); 
+        })
+        .catch(function() { 
+          Swal.fire({icon: 'error', title: 'Cámara no disponible', text: 'Por favor, permita el acceso a la cámara en su dispositivo.', confirmButtonText: 'Entendido'}); 
+        });
+    }
+
+    function takePhoto() {
+      fotoUrl = ''; 
+      isUploading = true; 
+      pendingRegistration = false;
+      document.getElementById('photoStatus').textContent = 'Subiendo en segundo plano...';
+      
+      var video = document.getElementById('cameraVideo');
+      var canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth; 
+      canvas.height = video.videoHeight;
+      var ctx = canvas.getContext('2d'); 
+      
+      ctx.drawImage(video, 0, 0);
+      
+      fotoBase64 = canvas.toDataURL('image/jpeg', 0.7);
+      
+      var preview = document.getElementById('photoPreview');
+      preview.src = fotoBase64; 
+      preview.style.display = 'block';
+      
+      document.getElementById('cameraBox').classList.add('photo-taken');
+      
+      if (currentStream) { 
+        var tracks = currentStream.getTracks();
+        for (var t = 0; t < tracks.length; t++) {
+          tracks[t].stop(); 
+        }
+        currentStream = null; 
+      }
+      
+      showScreen(2);
+      
+      google.script.run.withSuccessHandler(function(url) {
+        fotoUrl = (url && url !== 'Error al subir foto') ? url : ''; 
+        isUploading = false;
+        document.getElementById('photoStatus').textContent = fotoUrl ? '✅ Foto lista' : '⚠️ Error';
+        
+        if (pendingRegistration) enviarRegistroReal();
+      }).subirFoto(fotoBase64, document.getElementById('cedula').value.trim() || ('temp_' + Date.now()));
+    }
+
+    // CÉDULA
+    document.addEventListener('DOMContentLoaded', function() {
+      document.getElementById('cedula').addEventListener('input', function() { this.value = this.value.replace(/[^0-9]/g, ''); });
+      
+      document.getElementById('photoPreview').addEventListener('click', function() {
+        if (!this.src) return;
+        var modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1000;display:flex;justify-content:center;align-items:center;cursor:pointer';
+        var img = document.createElement('img');
+        img.src = this.src; img.style.cssText = 'max-width:90%;max-height:90%;border-radius:8px';
+        modal.appendChild(img); 
+        document.body.appendChild(modal);
+        modal.onclick = function() { document.body.removeChild(modal); };
+      });
+    });
+
+    function buscarEmpleado() {
+      var ced = document.getElementById('cedula').value.trim(); 
+      if (!ced) return;
+      
+      var btn = document.getElementById('btnBuscar'); 
+      var status = document.getElementById('statusBusqueda');
+      var info = document.getElementById('infoEmpleado'); 
+      var nextBtn = document.getElementById('nextAfterCedula');
+      
+      btn.disabled = true; 
+      status.style.display = 'block'; 
+      info.style.display = 'none'; 
+      nextBtn.disabled = true;
+
+      google.script.run.withSuccessHandler(function(res) {
+        btn.disabled = false; 
+        status.style.display = 'none';
+        var cargo = res.cargo ? res.cargo : '';
+        var centro = res.centro ? res.centro : '';
+        info.innerHTML = res.ok ? '<strong>' + res.nombre + '</strong><br>' + cargo + '<br>' + centro : '<span class="text-warning fw-bold" style="color:#d63384 !important;">⚠️ No encontrado. Se registrará como desconocido.</span>';
+        info.style.display = 'block'; 
+        nextBtn.disabled = false;
+      }).withFailureHandler(function() {
+        btn.disabled = false; 
+        status.style.display = 'none'; 
+        info.innerHTML = '<span class="text-danger">❌ Error conexión</span>'; 
+        info.style.display = 'block';
+      }).buscarEmpleadoPorCedula(ced);
+    }
+
+    // TIPO
+    function selectTipo(tipo) {
+      var radios = document.querySelectorAll('[name="tipo"]');
+      for (var i = 0; i < radios.length; i++) {
+        radios[i].checked = false;
+      }
+      var targetRadioId = tipo === 'Entrada' ? 'entradaRadio' : 'salidaRadio';
+      document.getElementById(targetRadioId).checked = true;
+      
+      var cards = document.querySelectorAll('[id^="card"]');
+      for (var i = 0; i < cards.length; i++) {
+        cards[i].classList.remove('border-success');
+      }
+      var targetCardId = tipo === 'Entrada' ? 'cardEntrada' : 'cardSalida';
+      document.getElementById(targetCardId).classList.add('border-success');
+    }
+
+    // GPS
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      var R = 6371000;
+      var dLat = (lat2 - lat1) * Math.PI / 180;
+      var dLon = (lon2 - lon1) * Math.PI / 180;
+      var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function getLocationAndCheck() {
+      var status = document.getElementById('locationStatus');
+      var btn = document.querySelector('button[onclick="getLocationAndCheck()"]');
+      
+      btn.disabled = true; 
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Calculando...'; 
+      status.innerHTML = '';
+      
+      var solved = false;
+
+      var processPos = function(pos) {
+        if (solved) return; 
+        solved = true; 
+        currentPosition = pos;
+        
+        var min = Infinity, closest = null;
+        
+        for (var k in DATA_CENTROS) { 
+          var c = DATA_CENTROS[k]; 
+          var d = calculateDistance(pos.coords.latitude, pos.coords.longitude, c.lat, c.lng); 
+          if (d < min) { 
+            min = d; 
+            closest = { ciudad: c.ciudad, centro: c.centro, lat: c.lat, lng: c.lng, radio: c.radio, distancia: d }; 
+          }
+        }
+        
+        btn.disabled = false; 
+        btn.innerHTML = '<svg width="24" height="24" fill="currentColor" class="me-2" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 0 0-6 3 3 0 1 0 0 6z"/></svg> Actualizar ubicación';
+        
+        if (closest) {
+          centroDetectado = closest.centro; 
+          ciudadDetectada = closest.ciudad;
+          
+          var radio = closest.radio || 30;
+          if (closest.distancia <= radio) {
+             status.innerHTML = '<div class="alert alert-success py-2 mb-0">✅ Estás en: <strong>' + closest.centro + '</strong></div>';
+          } else {
+             status.innerHTML = '<div class="alert alert-warning py-2 mb-0">📍 Referencia: <strong>' + closest.centro + '</strong> (a ' + Math.round(closest.distancia) + 'm)</div>';
+          }
+        } else { 
+          centroDetectado = 'Sin Info'; 
+          ciudadDetectada = 'Desconocida'; 
+          status.innerHTML = '<div class="text-danger fw-bold">⚠️ Sin centros cercanos.</div>'; 
+        }
+        
+        document.getElementById('acepto').checked = true;
+      };
+
+      if (currentPosition && (Date.now() - currentPosition.timestamp < 60000)) { 
+        processPos(currentPosition); 
+        return; 
+      }
+      
+      navigator.geolocation.getCurrentPosition(processPos, function() {}, {enableHighAccuracy: true, timeout: 2000, maximumAge: Infinity});
+      navigator.geolocation.getCurrentPosition(processPos, function() {}, {enableHighAccuracy: false, timeout: 2000, maximumAge: Infinity});
+      
+      setTimeout(function() { 
+        if (!solved) { 
+          btn.disabled = false; 
+          btn.innerHTML = 'Reintentar'; 
+          status.innerHTML = '<div class="text-danger small">⚠️ Active el GPS.</div>'; 
+        } 
+      }, 2500);
+    }
+
+    // ENVÍO DE REGISTRO
+    function intentarEnviarRegistro() {
+      if (!document.getElementById('acepto').checked) { 
+        Swal.fire('⚠️ Acepta política', '', 'warning'); 
+        return; 
+      }
+      
+      if (!currentPosition) { 
+        Swal.fire('⚠️ Obtenga ubicación', '', 'warning'); 
+        return; 
+      }
+      
+      if (isUploading) { 
+        pendingRegistration = true; 
+        Swal.fire({
+          title: 'Finalizando...', 
+          text: 'Sincronizando foto...', 
+          allowOutsideClick: false, 
+          didOpen: function() { Swal.showLoading(); }
+        }); 
+        return; 
+      }
+      
+      if (!fotoUrl && !isUploading) { 
+        if (fotoBase64) { 
+          takePhoto(); 
+          pendingRegistration = true; 
+          Swal.fire({
+            title: 'Reintentando...', 
+            didOpen: function() { Swal.showLoading(); }
+          }); 
+        } else { 
+          Swal.fire('⚠️ Falta Foto', '', 'error').then(function() { showScreen(1); }); 
+        } 
+        return; 
+      }
+      
+      enviarRegistroReal();
+    }
+
+    function enviarRegistroReal() {
+      var ced = document.getElementById('cedula').value.trim();
+      var tipoInput = document.querySelector('[name="tipo"]:checked');
+      var tipo = tipoInput ? tipoInput.value : null;
+      
+      var infoEl = document.getElementById('infoEmpleado');
+      var nombre = 'No encontrado';
+      if (infoEl) {
+         var strongEl = infoEl.querySelector('strong');
+         if (strongEl) nombre = strongEl.textContent;
+      }
+      
+      var datos = {
+        cedula1: ced, 
+        tipo: tipo, 
+        centro: centroDetectado, 
+        ciudad: ciudadDetectada,
+        lat: currentPosition.coords.latitude, 
+        lng: currentPosition.coords.longitude,
+        accuracy: currentPosition.coords.accuracy, 
+        acepto: true, 
+        nombre: nombre, 
+        fotoUrl: fotoUrl
+      };
+
+      Swal.fire({title: 'Enviando...', didOpen: function() { Swal.showLoading(); }});
+
+      google.script.run.withSuccessHandler(function(res) {
+        Swal.close();
+        if (res.status === 'ok') {
+          Swal.fire({
+            icon: 'success', 
+            title: '✅ Registro exitoso', 
+            text: res.message, 
+            timer: 2000, 
+            showConfirmButton: false
+          }).then(function() {
+            fotoBase64 = ''; 
+            fotoUrl = ''; 
+            currentPosition = null; 
+            
+            document.getElementById('cedula').value = '';
+            document.getElementById('infoEmpleado').style.display = 'none'; 
+            document.getElementById('nextAfterCedula').disabled = true;
+            
+            document.getElementById('photoStatus').textContent = ''; 
+            document.getElementById('locationStatus').innerHTML = '';
+            
+            document.getElementById('photoPreview').style.display = 'none'; 
+            document.getElementById('cameraBox').classList.remove('photo-taken');
+            
+            var radios = document.querySelectorAll('[name="tipo"]');
+            for (var r = 0; r < radios.length; r++) {
+              radios[r].checked = false;
+            }
+            var cards = document.querySelectorAll('[id^="card"]');
+            for (var c = 0; c < cards.length; c++) {
+              cards[c].classList.remove('border-success');
+            }
+            
+            showScreen(0);
+          });
+        } else {
+          Swal.fire({
+            icon: 'error', 
+            title: '❌ Registro no permitido', 
+            text: res.message, 
+            confirmButtonText: 'Entendido'
+          });
+        }
+      }).withFailureHandler(function(err) {
+        Swal.close(); 
+        Swal.fire({
+          icon: 'error', 
+          title: '❌ Error de conexión', 
+          text: 'No se pudo conectar con el servidor. Intente nuevamente.', 
+          confirmButtonText: 'Reintentar'
+        });
+      }).registrarUltra(datos);
+    }
+  </script>
+</body>
+</html>
