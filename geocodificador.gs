@@ -1,150 +1,141 @@
 // =================================================================
 // 📁 geocodificador.gs – Módulo de Geocodificación (NASE 2026 - Horas Extras)
-// ----------------------------------------------------------------------
+// =================================================================
 /**
  * @summary Módulo inteligente para geocodificación y control de asistencia.
- * @description Administra la conversión de coordenadas GPS (Lat/Lng) a direcciones.
- *              Calcula distancias (Haversine) contra el libro de Centros EXTERNO.
- *              Ajuste de índices a la estructura original solicitada por el usuario.
- *
- * @features
- *   - 🌍 Geocodificación inversa (APIs OpenCage, Maps.co, Nominatim).
- *   - 📏 Cálculo de distancia al centro asignado.
- *   - 🚦 Semáforo "Dentro/Fuera" del centro.
- *   - 📂 Lectura de "Centros" desde el Libro Base Operativa.
- *
- * @author NASE Team
- * @version 2.2 (Lectura Externa + Índices Originales)
+ * @description Lee la hoja "Centros" desde un libro EXTERNO.
+ * @version 2.3 (Corregido - Errores de variables y fórmula Haversine)
  */
 
 // =================================================================
 // 1. CONFIGURACIÓN DEL SISTEMA
 // =================================================================
 
-// Objeto global GEO que encapsula configuración y funciones
 if (typeof GEO === 'undefined') var GEO = {};
 
-// ID DEL LIBRO Nase Control de Entradas y Salidas (Donde está la hoja "Centros")
-const ID_LIBRO_BASE = "1PchIxXq617RRL556vHui4ImG7ms2irxiY3fPLIoqcQc"; 
+// ID DEL LIBRO EXTERNO donde está la hoja "Centros"
+const ID_LIBRO_CENTROS_EXTERNO = "1PchIxXq617RRL556vHui4ImG7ms2irxiY3fPLIoqcQc"; 
 
 GEO.CONFIG = {
-  SHEET_RESPUESTAS: "Respuestas", // Nombre de la hoja principal (Libro actual)
-  SHEET_CENTROS: "Centros",      // Nombre de la hoja de referencia (Libro Externo)
+  SHEET_RESPUESTAS: "Respuestas",
+  SHEET_CENTROS: "Centros",
   
-  // ✅ MAPEO DE COLUMNAS (Basado en estructura original solicitada por usuario)
-  // Indices 0-based correspondientes a:
-  // 0:Ced, 1:Centro, 2:Ciudad, 3:Lat, 4:Lng, 5:Acepto, 6:Ciudad_Geo, 7:Dir_Geo, 8:Accuracy, 9:Dentro, 10:Distancia...
-  R_COL_LAT: 3,            // Columna D: Latitud GPS (Índice 3)
-  R_COL_LNG: 4,            // Columna E: Longitud GPS (Índice 4)
-  R_COL_CIUDAD_GEO: 6,    // Columna G: Ciudad Geocodificada (Índice 6)
-  R_COL_DIR_GEO: 7,       // Columna H: Dirección Geocodificada (Índice 7)
-  R_COL_ACCURACY: 8,     // Columna I: Precisión GPS (Índice 8)
-  R_COL_DENTRO_CENTRO: 9, // Columna J: ¿Está dentro del centro? (Índice 9)
-  R_COL_DISTANCIA: 10,     // Columna K: Distancia al centro en metros (Índice 10)
- 
-  // Configuración de OpenCage (API Pagada de respaldo)
-  OPENCAGE_DAILY_LIMIT: 2500, // Límite de peticiones gratuitas diarias (aproximado)
-  OPENCAGE_API_PROP: 'OPENCAGE_API_KEY', // Nombre de la propiedad donde se guarda la API Key
-  OPENCAGE_QUOTA_PROP: 'OPENCAGE_QUOTA',    // Propiedad para contar uso diario
+  // ÍNDICES 1-BASED (para usar directamente con getRange)
+  // Estructura: A=Cédula, B=Centro, C=Ciudad, D=Lat, E=Lng, F=Acepto, 
+  //             G=Ciudad_Geo, H=Barrio/Dir, I=Accuracy, J=Dentro, K=Distancia
+  COL: {
+    CEDULA: 1,
+    CENTRO: 2,
+    CIUDAD: 3,
+    LAT: 4,
+    LNG: 5,
+    ACEPTO: 6,
+    CIUDAD_GEO: 7,
+    DIR_GEO: 8,
+    ACCURACY: 9,
+    DENTRO: 10,
+    DISTANCIA: 11
+  },
   
-  // Retrasos para APIs gratuitas (evitar bloqueos por Rate Limiting)
+  OPENCAGE_DAILY_LIMIT: 2500,
+  OPENCAGE_API_PROP: 'OPENCAGE_API_KEY',
+  OPENCAGE_QUOTA_PROP: 'OPENCAGE_QUOTA',
   REQUEST_DELAY_MS: 300
 };
 
 /**
  * @summary Guarda la API Key de OpenCage de forma segura.
- * @description Esta función debe ejecutarse UNA SOLA VEZ manualmente desde el editor.
  */
 function guardarApiKeyOpenCage() {
-  // ⚠️ ATENCIÓN: Reemplaza '0f4d...' con tu clave real si aún no la has guardado en Properties
-  const apiKey = '0f4d42a072704ffc8ad51d03a21fcea0'; 
+  var apiKey = '0f4d42a072704ffc8ad51d03a21fcea0'; 
   PropertiesService.getScriptProperties().setProperty(GEO.CONFIG.OPENCAGE_API_PROP, apiKey);
-  Logger.log('✅ API Key de OpenCage guardada de forma segura.');
-  SpreadsheetApp.getUi().alert('✅ API Key de OpenCage guardada correctamente. Ya puedes borrar esta función si lo deseas.');
+  Logger.log('✅ API Key de OpenCage guardada.');
+  SpreadsheetApp.getUi().alert('✅ API Key guardada correctamente.');
 }
 
 // =================================================================
-// 2. FUNCIONES AUXILIARES (Normalización y Cálculo)
+// 2. FUNCIONES AUXILIARES
 // =================================================================
 
-/**
- * @summary Normaliza coordenadas.
- * @param {String|Number} v - Valor de latitud/longitud.
- * @returns {Number|Null} Valor flotante o null si es inválido.
- */
 GEO.normalizarCoord = function(v) {
-  if (!v) return null;
-  let s = String(v).replace(/,/g, '.').trim();
-  return isNaN(s) ? null : parseFloat(s);
+  if (v === null || v === undefined || v === '') return null;
+  var s = String(v).replace(/,/g, '.').trim();
+  var num = parseFloat(s);
+  return isNaN(num) ? null : num;
 };
 
-/**
- * @summary Determina la ciudad basándose en reglas de negocio y coordenadas.
- * @description Correcciones lógicas para ciudades ambiguas.
- */
 GEO.normalizarCiudadLocal = function(ciudad, lat, lng) {
   if (!ciudad) return "No encontrado";
-  const l = ciudad.toString().toLowerCase();
+  var l = ciudad.toString().toLowerCase();
   
-  // Reglas específicas para ciudades con varios nombres
-  if (l.includes("risaralda") || l.includes("eje") || l.includes("amco") || l.includes("perimetro urbano pereira") || l.includes("perimetro urbano pereira")) {
+  if (l.indexOf("risaralda") !== -1 || l.indexOf("eje") !== -1 || l.indexOf("amco") !== -1 || l.indexOf("pereira") !== -1) {
     return lat >= 4.825 ? "Dosquebradas" : "Pereira";
   }
-  if (l.includes("valle") || l.includes("pac") || l.includes("perimetro urbano santiago de cali") || l.includes("cali")) return "Cali";
-  if (l.includes("cartago")) return "Cartago";
-  if (l.includes("bogot") || l.includes("cundinamarca")) return "Bogotá";
-  if (l.includes("medellín") || l.includes("perimetro urbano medellín")) return "Medellín";
+  if (l.indexOf("valle") !== -1 || l.indexOf("cali") !== -1) return "Cali";
+  if (l.indexOf("cartago") !== -1) return "Cartago";
+  if (l.indexOf("bogot") !== -1 || l.indexOf("cundinamarca") !== -1) return "Bogotá";
+  if (l.indexOf("medell") !== -1 || l.indexOf("antioquia") !== -1) return "Medellín";
+  if (l.indexOf("cartagena") !== -1 || l.indexOf("bolivar") !== -1) return "Cartagena";
+  if (l.indexOf("ibagu") !== -1 || l.indexOf("tolima") !== -1) return "Ibagué";
+  if (l.indexOf("neiva") !== -1 || l.indexOf("huila") !== -1) return "Neiva";
+  if (l.indexOf("armenia") !== -1 || l.indexOf("quind") !== -1) return "Armenia";
   
-  // Elimina prefijos comunes si no hay regla específica
-  return ciudad.replace(/^(Per[íi]metro Urbano|AMCO|Area Metropolitana Centro Occidente|.*,\s*)+/gi, '').split(',')[0].trim() || "No encontrado";
+  return ciudad.split(',')[0].trim() || "No encontrado";
 };
 
-/**
- * @summary Limpia la dirección eliminando código postal y país.
- */
 GEO.limpiarDireccion = function(dir) {
   if (!dir) return "Sin dirección específica";
-  return dir.split(',').map(p => p.trim()).filter(p => p && !/^\d{5,}$/i.test(p) && !/colombia|rap eje|risaralda|valle|cundinamarca|antioquia|66000|16000|05000|76000/i.test(p.toLowerCase())).join(', ').replace(/\s+/g, ' ').trim();
+  return dir.split(',')
+    .map(function(p) { return p.trim(); })
+    .filter(function(p) { 
+      return p && !/^\d{5,}$/i.test(p) && 
+             !/colombia|rap eje|risaralda|valle|cundinamarca|antioquia/i.test(p.toLowerCase());
+    })
+    .join(', ')
+    .replace(/\s+/g, ' ')
+    .trim();
 };
 
 /**
- * @summary Calcula la distancia entre dos puntos GPS (Fórmula Haversine).
+ * @summary Calcula distancia Haversine (CORREGIDO)
  */
 GEO.calcularDistancia = function(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  var R = 6371000; // Radio de la Tierra en metros
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLon = (lon2 - lon1) * Math.PI / 180;
+  var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+          Math.sin(dLon/2) * Math.sin(dLon/2);
+  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));  // ✅ CORREGIDO
   return R * c;
 };
 
 /**
- * @summary Busca dinámicamente el índice de una columna por nombre.
- * @description Fallback robusto para encontrar índices aunque el orden varíe ligeramente.
+ * @summary Busca índice de columna por nombre.
  */
 GEO.findHeaderIndex = function(headers, names) {
   if (!headers || !headers.length) return -1;
-  const lower = headers.map(h => (h || "").toString().trim().toLowerCase());
-  for (const cand of names) {
-    const idx = lower.indexOf(cand.toString().trim().toLowerCase());
-    if (idx !== -1) return idx + 1;
+  for (var i = 0; i < names.length; i++) {
+    var name = names[i].toString().toLowerCase().trim();
+    for (var j = 0; j < headers.length; j++) {
+      if ((headers[j] || "").toString().toLowerCase().trim() === name) {
+        return j + 1; // 1-based
+      }
+    }
   }
   return -1;
 };
 
 // =================================================================
-// 3. CONTROL DE CUOTAS DE OPENCAGE (Optimización de Costos)
+// 3. CONTROL DE CUOTAS OPENCAGE
 // =================================================================
 
 GEO.checkAndUpdateOpenCageQuota = function() {
-  const scriptProperties = PropertiesService.getScriptProperties();
-  const today = new Date().toISOString().slice(0, 10);
+  var scriptProperties = PropertiesService.getScriptProperties();
+  var today = new Date().toISOString().slice(0, 10);
   
-  let quotaData = JSON.parse(scriptProperties.getProperty(GEO.CONFIG.OPENCAGE_QUOTA_PROP) || '{"date": "", "count": 0}');
+  var quotaStr = scriptProperties.getProperty(GEO.CONFIG.OPENCAGE_QUOTA_PROP) || '{"date": "", "count": 0}';
+  var quotaData = JSON.parse(quotaStr);
 
   if (quotaData.date !== today) {
     quotaData.date = today;
@@ -152,49 +143,53 @@ GEO.checkAndUpdateOpenCageQuota = function() {
   }
 
   if (quotaData.count >= GEO.CONFIG.OPENCAGE_DAILY_LIMIT) {
-    Logger.log(`❌ LÍMITE DIARIO DE OPENCAGE ALCANZADO (${GEO.CONFIG.OPENCAGE_DAILY_LIMIT}).`);
+    Logger.log('❌ Límite diario de OpenCage alcanzado.');
     return false; 
   }
 
   quotaData.count++;
   scriptProperties.setProperty(GEO.CONFIG.OPENCAGE_QUOTA_PROP, JSON.stringify(quotaData));
-  Logger.log(`✅ Llamada a OpenCage permitida. (${quotaData.count}/${GEO.CONFIG.OPENCAGE_DAILY_LIMIT}) hoy.`);
   return true; 
 };
 
 // =================================================================
-// 4. FUENTES DE GEOCODIFICACIÓN (Wrappers de API)
+// 4. FUENTES DE GEOCODIFICACIÓN
 // =================================================================
 
-GEO.getFromMapsCo = (lat, lng) => {
-  const url = `https://geocode.maps.co/reverse?lat=${lat}&lon=${lng}&accept-language=es`;
-  const r = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-  return JSON.parse(r.getContentText());
+GEO.getFromMapsCo = function(lat, lng) {
+  var url = 'https://geocode.maps.co/reverse?lat=' + lat + '&lon=' + lng + '&accept-language=es';
+  var response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  return JSON.parse(response.getContentText());
 };
 
-GEO.getFromNominatim = (lat, lng) => {
-  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&addressdetails=1&accept-language=es`;
-  const r = UrlFetchApp.fetch(url, { headers: { 'User-Agent': 'NASE-Geocoder/1.0 (contact: soporte@nasecolombia.com.co)' } });
-  return JSON.parse(r.getContentText());
+GEO.getFromNominatim = function(lat, lng) {
+  var url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' + lat + 
+            '&lon=' + lng + '&addressdetails=1&accept-language=es';
+  var response = UrlFetchApp.fetch(url, { 
+    headers: { 'User-Agent': 'NASE-Geocoder/1.0' },
+    muteHttpExceptions: true 
+  });
+  return JSON.parse(response.getContentText());
 };
 
-GEO.getFromOpenCage = (lat, lng) => {
+GEO.getFromOpenCage = function(lat, lng) {
   if (!GEO.checkAndUpdateOpenCageQuota()) {
-    return { error: 'Límite diario de OpenCage alcanzado.' };
+    return { error: 'Límite diario alcanzado.' };
   }
   
-  const apiKey = PropertiesService.getScriptProperties().getProperty(GEO.CONFIG.OPENCAGE_API_PROP);
-  if (!apiKey) return { error: 'API Key de OpenCage no configurada.' };
+  var apiKey = PropertiesService.getScriptProperties().getProperty(GEO.CONFIG.OPENCAGE_API_PROP);
+  if (!apiKey) return { error: 'API Key no configurada.' };
   
-  const url = `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${apiKey}&language=es&limit=1`;
-  const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-  const json = JSON.parse(response.getContentText());
+  var url = 'https://api.opencagedata.com/geocode/v1/json?q=' + lat + '+' + lng + 
+            '&key=' + apiKey + '&language=es&limit=1';
+  var response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  var json = JSON.parse(response.getContentText());
 
   if (response.getResponseCode() === 200 && json.results && json.results.length > 0) {
-    const result = json.results[0];
-    const components = result.components;
-    const ciudad = GEO.normalizarCiudadLocal(components.city || components.town || '', lat, lng);
-    const direccion = GEO.limpiarDireccion(result.formatted);
+    var result = json.results[0];
+    var components = result.components;
+    var ciudad = GEO.normalizarCiudadLocal(components.city || components.town || '', lat, lng);
+    var direccion = GEO.limpiarDireccion(result.formatted);
     return { ciudad: ciudad, direccion: direccion, fuente: 'OpenCage' };
   }
   return null;
@@ -205,56 +200,56 @@ GEO.getFromOpenCage = (lat, lng) => {
 // =================================================================
 
 GEO.reverseGeocodeInternal = function(lat, lng) {
-  let result = null;
-  let source = '';
+  var result = null;
+  var source = '';
 
-  // 1. Intentar Maps.co (Rápido y fiable)
+  // 1. Maps.co
   try {
-    const j = GEO.getFromMapsCo(lat, lng);
+    var j = GEO.getFromMapsCo(lat, lng);
     if (j && j.display_name) {
-      const a = j.address || {};
-      const ciudad = GEO.normalizarCiudadLocal(a.city || a.town || a.county || '', lat, lng);
-      const direccion = GEO.limpiarDireccion(j.display_name);
-      result = { ciudad: ciudad, direccion: direccion };
+      var a = j.address || {};
+      result = { 
+        ciudad: GEO.normalizarCiudadLocal(a.city || a.town || a.county || '', lat, lng),
+        direccion: GEO.limpiarDireccion(j.display_name)
+      };
       source = 'Maps.co';
     }
-  } catch (e) { Logger.log(e); }
+  } catch (e) { Logger.log('Maps.co error: ' + e); }
 
-  // 2. Si falla, intentar Nominatim (OpenStreetMap)
+  // 2. Nominatim
   if (!result) {
     try {
-      const j = GEO.getFromNominatim(lat, lng);
-      if (j && j.display_name) {
-        const a = j.address || {};
-        const ciudad = GEO.normalizarCiudadLocal(a.city || a.town || a.county || '', lat, lng);
-        const direccion = GEO.limpiarDireccion(j.display_name);
-        result = { ciudad: ciudad, direccion: direccion };
+      var j2 = GEO.getFromNominatim(lat, lng);
+      if (j2 && j2.display_name) {
+        var a2 = j2.address || {};
+        result = { 
+          ciudad: GEO.normalizarCiudadLocal(a2.city || a2.town || a2.county || '', lat, lng),
+          direccion: GEO.limpiarDireccion(j2.display_name)
+        };
         source = 'Nominatim';
         Utilities.sleep(1000);
       }
-    } catch (e) { Logger.log(e); }
+    } catch (e) { Logger.log('Nominatim error: ' + e); }
   }
  
-  // 3. Si fallan, intentar OpenCage (último recurso)
+  // 3. OpenCage
   if (!result) {
-    const openCageResult = GEO.getFromOpenCage(lat, lng);
+    var openCageResult = GEO.getFromOpenCage(lat, lng);
     if (openCageResult && !openCageResult.error) {
       result = { ciudad: openCageResult.ciudad, direccion: openCageResult.direccion };
       source = 'OpenCage';
-    } else if (openCageResult && openCageResult.error) {
-       return { ciudad: 'Error', direccion: openCageResult.error, fuente: 'OpenCage' };
     }
   }
 
+  // Fallback
   if (!result) {
-    result = { ciudad: 'No encontrado', direccion: 'Sin dirección específica' };
+    result = { ciudad: 'No encontrado', direccion: 'Sin dirección' };
     source = 'Ninguna';
   }
  
   result.fuente = source;
-  result.accuracy = 0;
- 
-  if (!source.includes('Nominatim')) {
+  
+  if (source !== 'Nominatim') {
     Utilities.sleep(GEO.CONFIG.REQUEST_DELAY_MS);
   }
  
@@ -262,155 +257,179 @@ GEO.reverseGeocodeInternal = function(lat, lng) {
 };
 
 // =================================================================
-// 6. FUNCIÓN PÚBLICA PRINCIPAL (Trigger de Usuario)
+// 6. FUNCIÓN PRINCIPAL: GEOCODIFICAR FILA ACTIVA
 // =================================================================
 
-/**
- * @summary Función principal que se ejecuta desde el Menú.
- * @description Lee la fila seleccionada, conecta al libro EXTERNO de centros,
- *              calcula la distancia y escribe los datos en el libro actual.
- */
 function geocodificarFilaActiva() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const hojaRes = ss.getActiveSheet();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hojaRes = ss.getActiveSheet();
+  var ui = SpreadsheetApp.getUi();
   
+  // Validar hoja
   if (hojaRes.getName() !== GEO.CONFIG.SHEET_RESPUESTAS) {
-    SpreadsheetApp.getUi().alert("Por favor, ejecuta esta función desde la hoja 'Respuestas'.");
+    ui.alert("⚠️ Ejecuta desde la hoja '" + GEO.CONFIG.SHEET_RESPUESTAS + "'.");
     return;
   }
 
-  // ----------------------------------------------------------------------
-  // 1. OBTENER DATOS DE LA FILA ACTIVA (Libro Actual)
-  // ----------------------------------------------------------------------
-  const fila = hojaRes.getActiveCell().getRow();
-  
-  if (!fila || fila < 2) { 
-    SpreadsheetApp.getUi().alert("Selecciona una fila válida en la hoja Respuestas."); 
+  var fila = hojaRes.getActiveCell().getRow();
+  if (fila < 2) { 
+    ui.alert("⚠️ Selecciona una fila con datos (no el encabezado)."); 
     return; 
   }
 
-  const headers = hojaRes.getRange(1, 1, 1, hojaRes.getLastColumn()).getValues()[0] || [];
-  const getCol = (name) => GEO.findHeaderIndex(headers, [name]);
+  // Leer datos de la fila usando constantes de columna
+  var COL = GEO.CONFIG.COL;
+  var lat = GEO.normalizarCoord(hojaRes.getRange(fila, COL.LAT).getValue());
+  var lng = GEO.normalizarCoord(hojaRes.getRange(fila, COL.LNG).getValue());
+  var nombreCentro = String(hojaRes.getRange(fila, COL.CENTRO).getValue() || '').trim();
+  var ciudadCentro = String(hojaRes.getRange(fila, COL.CIUDAD).getValue() || '').trim();
 
-  const filaVals = hojaRes.getRange(fila, 1, 1, hojaRes.getLastColumn()).getValues()[0];  
-  const centro = (filaVals[getCol("centro") - 1] || "").toString().trim();
-  const ciudadCentro = (filaVals[getCol("ciudad") - 1] || "").toString().trim();
-  
-  // Normalizar coordenadas (Manejo de comas separador de miles o decimales)
-  const latEmp = GEO.normalizarCoord(filaVals[getCol("lat") - 1]); 
-  const lngEmp = GEO.normalizarCoord(filaVals[getCol("lng") - 1]); 
-  const direccion = (filaVals[getCol("direccion") - 1] || "").toString();
-
-  // Validar datos mínimos
-  if (isNaN(latEmp) || isNaN(lngEmp)) {
-    SpreadsheetApp.getUi().alert("⚠️ Coordenadas inválidas o vacías en la fila seleccionada.");
+  // Validar coordenadas
+  if (lat === null || lng === null) {
+    ui.alert("❌ Coordenadas inválidas en la fila " + fila);
     return;
   }
-  if (!centro) {
-    SpreadsheetApp.getUi().alert("⚠️ La fila seleccionada no tiene un Centro asignado en la columna 'Centro'.");
+  if (!nombreCentro) {
+    ui.alert("❌ Falta el nombre del Centro en la fila " + fila);
     return;
   }
 
-  // ----------------------------------------------------------------------
-  // 2. BUSCAR INFORMACIÓN DEL CENTRO EN EL LIBRO EXTERNO
-  // ----------------------------------------------------------------------
-  
-  let latCentro = null, lngCentro = null, radio = 30, urlImagenCentro = "";
+  // ----------------------------------------------------------------
+  // BUSCAR CENTRO EN LIBRO EXTERNO
+  // ----------------------------------------------------------------
+  var centroRef = null;
   
   try {
-    // ABRIR LIBRO EXTERNO (Base Operativa)
-    const ssExt = SpreadsheetApp.openById(ID_LIBRO_BASE);
+    var ssExterno = SpreadsheetApp.openById(ID_LIBRO_CENTROS_EXTERNO);
+    var hojaCentros = ssExterno.getSheetByName("Centros");
+    if (!hojaCentros) hojaCentros = ssExterno.getSheetByName("BASE_CENTROS");
     
-    // Buscar hoja "Centros" en el libro externo
-    let hojaCentros = ssExt.getSheetByName("Centros");
     if (!hojaCentros) {
-       // Intento secundario por si el nombre difiere
-       hojaCentros = ssExt.getSheetByName("BASE_CENTROS");
-    }
-
-    if (!hojaCentros) {
-      SpreadsheetApp.getUi().alert("⚠️ No se encontró la hoja 'Centros' ni 'BASE_CENTROS' en el Libro Base Operativa.");
+      ui.alert("❌ No se encontró la hoja 'Centros' en el libro externo.");
       return;
     }
-
-    const dataCentros = hojaCentros.getDataRange().getValues();
-    if (!dataCentros || dataCentros.length < 2) return;
-
-    const headersCentros = dataCentros[0];
-  
-    // Función auxiliar para buscar en la hoja Centros
-    const getColC = (name) => GEO.findHeaderIndex(headersCentros, [name]);
-
-    // Iterar para encontrar el centro que coincida (Nombre + Ciudad)
-    for (let i = 1; i < dataCentros.length; i++) {
-      const rowC = dataCentros[i];
-      const nombreC = (rowC[getColC("centro") - 1] || "").toString().trim();
-      const ciudadC = (rowC[getColC("ciudad") - 1] || "").toString().trim();
-     
-      // Coincidencia insensible a mayúsculas
-      if (nombreC.toUpperCase() === centro.toUpperCase() && ciudadC.toUpperCase() === ciudadCentro.toUpperCase()) {
-        // Leer coordenadas del centro externo
-        latCentro = GEO.normalizarCoord(rowC[getColC("lat ref") - 1]);
-        lngCentro = GEO.normalizarCoord(rowC[getColC("lng ref") - 1]);
-        radio = rowC[getColC("radio") - 1] ? Number(rowC[getColC("radio") - 1]) : 30;
-        
-        // Leer dirección e imagen si existen en el libro externo
-        const idxDir = getColC("direccion");
-        const idxImg = getColC("link_imagen");
-        
-        direccion = (idxDir > -1) ? (rowC[idxDir - 1] || "").toString() : "";
-        
-        if (idxImg > -1) {
-           urlImagenCentro = (rowC[idxImg - 1] || "").toString().trim();
-        }
-        
+    
+    var dataCentros = hojaCentros.getDataRange().getValues();
+    var headersCentros = dataCentros[0].map(function(h) { 
+      return String(h).toUpperCase().trim(); 
+    });
+    
+    // Buscar índices
+    var idxCentroNombre = headersCentros.indexOf("CENTRO");
+    var idxCentroCiudad = headersCentros.indexOf("CIUDAD");
+    var idxCentroLat = -1, idxCentroLng = -1, idxCentroRadio = -1;
+    
+    for (var i = 0; i < headersCentros.length; i++) {
+      if (headersCentros[i] === "LAT REF" || headersCentros[i] === "LAT") idxCentroLat = i;
+      if (headersCentros[i] === "LNG REF" || headersCentros[i] === "LNG") idxCentroLng = i;
+      if (headersCentros[i] === "RADIO") idxCentroRadio = i;
+    }
+    
+    Logger.log("Headers Centros: " + headersCentros.join(" | "));
+    Logger.log("Índices: Centro=" + idxCentroNombre + " Ciudad=" + idxCentroCiudad + 
+               " Lat=" + idxCentroLat + " Lng=" + idxCentroLng);
+    
+    if (idxCentroNombre === -1 || idxCentroCiudad === -1 || idxCentroLat === -1 || idxCentroLng === -1) {
+      ui.alert("❌ Faltan columnas en la hoja Centros del libro externo.\n" +
+               "Se requiere: Ciudad, Centro, LAT REF, LNG REF");
+      return;
+    }
+    
+    // Buscar el centro específico
+    for (var i = 1; i < dataCentros.length; i++) {
+      var rowC = dataCentros[i];
+      var nombreC = String(rowC[idxCentroNombre] || '').trim().toUpperCase();
+      var ciudadC = String(rowC[idxCentroCiudad] || '').trim().toUpperCase();
+      
+      if (nombreC === nombreCentro.toUpperCase() && ciudadC === ciudadCentro.toUpperCase()) {
+        centroRef = {
+          lat: GEO.normalizarCoord(rowC[idxCentroLat]),
+          lng: GEO.normalizarCoord(rowC[idxCentroLng]),
+          radio: idxCentroRadio !== -1 ? (parseInt(rowC[idxCentroRadio]) || 30) : 30,
+          nombre: String(rowC[idxCentroNombre]).trim(),
+          ciudad: String(rowC[idxCentroCiudad]).trim()
+        };
         break;
       }
     }
-  } catch (errExt) {
-    SpreadsheetApp.getUi().alert("❌ Error leyendo datos externos del Centro: " + errExt.toString());
+    
+  } catch (e) {
+    ui.alert("❌ Error accediendo al libro externo:\n" + e.toString());
     return;
   }
 
-  // Validar que se encontró el centro de referencia
-  if (isNaN(latCentro) || isNaN(lngCentro)) {
-    SpreadsheetApp.getUi().alert(`⚠️ No se encontró el centro "${centro}" en la ciudad "${ciudadCentro}" en el Libro Base.`);
+  if (!centroRef) {
+    ui.alert('❌ Centro no encontrado:\n"' + nombreCentro + '" en "' + ciudadCentro + '"');
     return;
   }
-
-  // ----------------------------------------------------------------------
-  // 3. CÁLCULO DE DISTANCIA Y ESTADO (Dentro/Fuera)
-  // ----------------------------------------------------------------------
-  const distancia = GEO.calcularDistancia(latCentro, lngCentro, latEmp, lngEmp); 
-  const dentro = distancia <= radio;
-
-  // ----------------------------------------------------------------------
-  // 4. OBTENER GEOCODIFICACIÓN DE LA UBICACIÓN DEL EMPLEADO
-  // ----------------------------------------------------------------------
-  const resultadoGeo = GEO.reverseGeocodeInternal(latEmp, lngEmp);
-
-  // ----------------------------------------------------------------------
-  // 5. ESCRIBIR RESULTADOS EN LA HOJA "RESPUESTAS" (Libro Actual)
-  // ----------------------------------------------------------------------
   
-  // Preparar rangos para escritura rápida
-  const rangoCiudad = hojaRes.getRange(fila, GEO.CONFIG.R_COL_CIUDAD_GEO + 1);
-  const rangoDir = hojaRes.getRange(fila, GEO.CONFIG.R_COL_DIR_GEO + 1);
-  const rangoDentro = hojaRes.getRange(fila, GEO.CONFIG.R_COL_DENTRO_CENTRO + 1);
-  const rangoDistancia = hojaRes.getRange(fila, GEO.CONFIG.R_COL_DISTANCIA + 1);
-  const rangoAccuracy = hojaRes.getRange(fila, GEO.CONFIG.R_COL_ACCURACY + 1);
-
-  rangoCiudad.setValue(resultadoGeo.ciudad);
-  rangoDir.setValue(resultadoGeo.direccion);
-  rangoAccuracy.setValue(resultadoGeo.fuente); // Guardar fuente de la geocodificación
-
-  rangoDentro.setValue(dentro ? "Sí" : "No");
-  rangoDistancia.setValue(Number(distancia.toFixed(2)));
-
-  // Alerta final
-  if (dentro) {
-    SpreadsheetApp.getUi().alert(`✅ La ubicación está DENTRO del centro "${centro}".\n\n🏢 Ciudad: ${resultadoGeo.ciudad}\n📍 Dirección: ${resultadoGeo.direccion}\n📏 Distancia: ${distancia.toFixed(2)}m`);
-  } else {
-    SpreadsheetApp.getUi().alert(`📍 La ubicación está FUERA del centro "${centro}".\n\n🏢 Ciudad: ${resultadoGeo.ciudad}\n📍 Dirección: ${resultadoGeo.direccion}\n📏 Distancia: ${distancia.toFixed(2)}m\n\nSe ha registrado la geocodificación.`);
+  if (centroRef.lat === null || centroRef.lng === null) {
+    ui.alert('❌ El centro "' + centroRef.nombre + '" no tiene coordenadas válidas.');
+    return;
   }
+
+  // Calcular distancia
+  var distancia = GEO.calcularDistancia(lat, lng, centroRef.lat, centroRef.lng);
+  var estaDentro = distancia <= centroRef.radio;
+
+  // Geocodificar ubicación del empleado
+  var resultado = GEO.reverseGeocodeInternal(lat, lng);
+
+  // Escribir resultados
+  hojaRes.getRange(fila, COL.CIUDAD_GEO).setValue(resultado.ciudad);
+  hojaRes.getRange(fila, COL.DIR_GEO).setValue(resultado.direccion);
+  hojaRes.getRange(fila, COL.ACCURACY).setValue(resultado.fuente);
+  hojaRes.getRange(fila, COL.DENTRO).setValue(estaDentro ? "Sí" : "No");
+  hojaRes.getRange(fila, COL.DISTANCIA).setValue(Math.round(distancia));
+
+  // Mostrar resultado
+  if (estaDentro) {
+    ui.alert('✅ DENTRO del centro "' + centroRef.nombre + '"\n\n' +
+             '📍 Ciudad: ' + resultado.ciudad + '\n' +
+             '🏠 Dirección: ' + resultado.direccion + '\n' +
+             '📏 Distancia: ' + Math.round(distancia) + 'm (Radio: ' + centroRef.radio + 'm)\n' +
+             '📡 Fuente: ' + resultado.fuente);
+  } else {
+    ui.alert('⚠️ FUERA del centro "' + centroRef.nombre + '"\n\n' +
+             '📍 Ciudad: ' + resultado.ciudad + '\n' +
+             '🏠 Dirección: ' + resultado.direccion + '\n' +
+             '📏 Distancia: ' + Math.round(distancia) + 'm (Radio: ' + centroRef.radio + 'm)\n' +
+             '📡 Fuente: ' + resultado.fuente);
+  }
+}
+
+// =================================================================
+// 7. FUNCIÓN DE PRUEBA
+// =================================================================
+
+function testGeocodificador() {
+  Logger.log("=== PRUEBA GEOCODIFICADOR ===");
+  
+  // Probar acceso al libro externo
+  try {
+    var ssExt = SpreadsheetApp.openById(ID_LIBRO_CENTROS_EXTERNO);
+    Logger.log("✅ Libro externo accesible: " + ssExt.getName());
+    
+    var hojaCentros = ssExt.getSheetByName("Centros");
+    if (hojaCentros) {
+      Logger.log("✅ Hoja 'Centros' encontrada con " + (hojaCentros.getLastRow() - 1) + " registros");
+      
+      var headers = hojaCentros.getRange(1, 1, 1, hojaCentros.getLastColumn()).getValues()[0];
+      Logger.log("📊 Headers: " + headers.join(" | "));
+    } else {
+      Logger.log("❌ Hoja 'Centros' no encontrada");
+    }
+  } catch (e) {
+    Logger.log("❌ Error: " + e.toString());
+  }
+  
+  // Probar geocodificación
+  var lat = 4.710989;
+  var lng = -74.072092;
+  Logger.log("\n📍 Probando geocodificación: " + lat + ", " + lng);
+  
+  var resultado = GEO.reverseGeocodeInternal(lat, lng);
+  Logger.log("Ciudad: " + resultado.ciudad);
+  Logger.log("Dirección: " + resultado.direccion);
+  Logger.log("Fuente: " + resultado.fuente);
 }
