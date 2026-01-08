@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <!-- =======================================================================
- * 📄 consulta.html – Interfaz de Aprobación y Consulta (NASE 2026)
+ * 📄 consulta.html – Interfaz de Aprobación (NASE 2026)
  * ----------------------------------------------------------------------
+/**
  * @summary Dashboard web para control de Horas Extras.
  * @description 
  * Interfaz administrativa con capacidades de aprobación:
@@ -14,11 +15,11 @@
  *   - 🚦 **Columna Estado:** Visualiza si está Pendiente Supervisor, Director o Aprobado.
  *   - ✅ **Aprobación Integrada:** Botones para aprobar registros según el rol del usuario.
  *   - 🖼️ **Visor de Fotos:** Modal ampliable.
- *   - 📝 **Detalles:** Modal lateral con info completa.
- *   - 💾 **Log Automático:** Guarda el email del aprobador en la hoja "Respuestas".
+ *   - 📝 **Detalles:** Modal con 4 tarjetas (Entrada, Salida, Log).
+ *   - 📊 **Contadores:** Panel superior con estadísticas de aprobación.
  *
  * @author NASE Team
- * @version 2.0 (Aprobación Horas Extras)
+ * @version 2.2 (Corrección Cards + Contadores)
  ======================================================================= -->
 <html lang="es">
 <head>
@@ -33,7 +34,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script> 
  
   <!-- ======================================================================
-   * 🎨 ESTILOS CSS (Actualizado con colores de Aprobación)
+   * 🎨 ESTILOS CSS (Estilo Asistencia + Modal Cards)
    * ====================================================================== -->
   <style>
     :root {
@@ -41,15 +42,14 @@
       --card: #fff;
       --primary: #0b6efd;
       --success: #198754;
-      --warning: #ffc107;
       --text-color: #17365D;
     }
    
     html, body {
-      margin:0;
-      padding:0;
-      width:100%;
-      height:100%;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
       font-family: 'Poppins', Arial, Helvetica, sans-serif;
       background-color: var(--bg);
       font-size: 0.875rem;
@@ -57,7 +57,7 @@
    
     .app-container {
       width: 100%;
-      max-width: 1400px; /* Un poco más ancho para nuevas columnas */
+      max-width: 1400px;
       margin: 0 auto;
       padding: 20px;
     }
@@ -82,6 +82,22 @@
       flex-grow: 1;
       padding: 0 20px;
     }
+   
+    /* Estilo de Estadísticas (Stats Box) */
+    .stats-box {
+      background: white;
+      padding: 15px;
+      border-radius: 12px;
+      text-align: center;
+      border: 1px solid #f0f0f0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .stats-num { font-size: 1.6rem; font-weight: 600; color: var(--text-color); line-height: 1.2; }
+    .stats-label { color: #6c757d; font-size: 0.8rem; font-weight: 500; text-transform: uppercase; }
    
     .filters-card {
       background: var(--card);
@@ -108,7 +124,7 @@
    
     .form-control:focus, .form-select:focus {
       border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+      box-shadow: 0 0 0 3px rgba(11,110,253,0.15);
     }
    
     .btn-custom {
@@ -169,7 +185,7 @@
     .btn-aprobar-dir:hover { background-color: #b02a37; }
    
     .table-container {
-      max-height: 700px; /* Un poco más alto */
+      max-height: 700px;
       overflow-y: auto;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
@@ -183,7 +199,7 @@
 
     .table {
       width: 100%;
-      min-width: 1400px; /* Aumentado para nuevas columnas */
+      min-width: 1400px;
       border-collapse: collapse;
     }
 
@@ -348,32 +364,88 @@
       border-bottom: none;
     }
    
+    /* ESTILOS DEL MODAL (CARDS) */
+    .modal-card {
+      background: #f8f9fa;
+      border-radius: 12px;
+      padding: 20px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    .modal-card-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      color: var(--text-color);
+      margin-bottom: 15px;
+      border-bottom: 1px solid #e9ecef;
+      padding-bottom: 10px;
+    }
+    .modal-log-box {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid #eee;
+      margin-top: 20px;
+    }
+   
     @media (max-width: 768px) {
       .app-container { padding: 10px; }
       .header { padding: 10px 15px; }
       .page-title { font-size: 1.2rem; }
       .logo { height: 50px; }
       .filters-card, .table-container { padding: 15px; }
-      .table thead th, .table tbody td { padding: 8px 6px; font-size: 11px; }
+      .table thead th, .table tbody td { padding: 8px 6px; font-size: 12px; }
       .foto-cell, .no-photo { width: 30px; height: 30px; font-size: 14px; }
+      .stats-box { padding: 10px; }
+      .stats-num { font-size: 1.2rem; }
     }
   </style>
 </head>
 
+<!-- ======================================================================
+ * 📐 ESTRUCTURA HTML
+ ====================================================================== -->
 <body>
-  <!-- ======================================================================
-   * 📐 ESTRUCTURA HTML
-   * ====================================================================== -->
-
   <div class="app-container">
-    <!-- CABECERA -->
+    <!-- 0. PANEL DE ESTADÍSTICAS (Stats Box) -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="stats-box">
+          <div class="stats-num" id="statTotal">0</div>
+          <div class="stats-label">Registros</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stats-box">
+          <div class="stats-num text-warning" id="statPendienteSup">0</div>
+          <div class="stats-label">Pendiente Supervisor</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stats-box">
+          <div class="stats-num text-danger" id="statPendienteDir">0</div>
+          <div class="stats-label">Pendiente Director</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stats-box">
+          <div class="stats-num text-success" id="statAprobado">0</div>
+          <div class="stats-label">Aprobado</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1. CABECERA -->
     <div class="header">
       <img src="https://raw.githubusercontent.com/jotalexvalencia/NASE/main/Logo_Nase.png" alt="NASE" class="logo">
       <h2 class="page-title">Control y Aprobación de Horas Extras</h2>
       <div style="width: 80px;"></div>
     </div>
    
-    <!-- 1. TARJETA DE FILTROS -->
+    <!-- 2. TARJETA DE FILTROS -->
     <div class="filters-card">
       <div class="row g-3">
         <div class="col-md-3">
@@ -410,7 +482,7 @@
       </div>
     </div>
    
-    <!-- 2. TABLA DE REGISTROS -->
+    <!-- 3. TABLA DE REGISTROS -->
     <div class="table-container">
       <table class="table" id="tablaRegistros">
         <thead>
@@ -425,7 +497,7 @@
             <th>F. Sal</th>
             <th>H. Sal</th>
             <th>Foto Sal</th>
-            <th>Estado HE</th> <!-- NUEVA COLUMNA VISUAL -->
+            <th>Estado HE</th>
             <th>Acciones</th>
           </tr>
         </thead>
@@ -442,31 +514,34 @@
       </table>
     </div>
    
-    <!-- 3. PAGINACIÓN -->
+    <!-- 4. PAGINACIÓN -->
     <div class="pagination-container">
       <ul class="pagination" id="paginacion"></ul>
     </div>
    
-    <!-- 4. MODAL VISOR DE FOTOS -->
+    <!-- 5. MODAL VISOR DE FOTOS -->
     <div id="photoModal" style="display:none;position:fixed;z-index:2000;left:0;top:0;width:100%;height:100%;background-color:rgba(0,0,0,0.8);cursor:pointer;">
       <span style="position:absolute;top:20px;right:30px;color:#fff;font-size:40px;font-weight:bold;z-index:2001;" onclick="closePhotoModal()">&times;</span>
       <img style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);max-width:90%;max-height:90%;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);" id="modalImage">
     </div>
    
-    <!-- 5. MODAL DETALLES -->
+    <!-- 6. MODAL DE DETALLES (CON 4 CARDS) -->
     <div id="detalleModal" style="display:none;position:fixed;z-index:2000;left:0;top:0;width:100%;height:100%;background-color:rgba(0,0,0,0.5);overflow-y:auto;">
       <div style="background-color:#fff;margin:2% auto;padding:0;border-radius:16px;width:90%;max-width:900px;box-shadow:0 10px 40px rgba(0,0,0,0.2);overflow:hidden;">
         <div style="background:linear-gradient(135deg,var(--primary),#0a58ca);color:white;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;">
           <h3 style="font-size:18px;font-weight:600;margin:0;">Detalles del Registro</h3>
           <button style="color:white;font-size:24px;font-weight:bold;background:none;border:none;opacity:0.8;" onclick="closeDetalleModal()">&times;</button>
         </div>
+        
         <div style="padding:20px;">
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:20px;">
-            <!-- BLOQUE ENTRADA -->
-            <div style="background-color:#f8f9fa;border-radius:12px;padding:16px;">
-              <div style="font-size:14px;font-weight:600;color:var(--text-color);margin-bottom:12px;display:flex;align-items:center;gap:6px;">
-                <i class="bi bi-box-arrow-in-right"></i> Entrada
+          <div style="display:grid;grid-template-columns: 1fr 1fr;gap:20px;">
+            
+            <!-- CARD 1: ENTRADA -->
+            <div class="modal-card">
+              <div class="modal-card-title">
+                <i class="bi bi-box-arrow-in-right text-success"></i> Entrada
               </div>
+              
               <div style="display:flex;margin-bottom:8px;align-items:center;">
                 <span style="font-weight:500;color:#6c757d;width:80px;font-size:13px;">Fecha:</span>
                 <span style="color:#212529;font-size:13px;" id="detalleFechaEntrada">-</span>
@@ -483,6 +558,8 @@
                 <span style="font-weight:500;color:#6c757d;width:80px;font-size:13px;">Estado:</span>
                 <span style="color:#212529;font-size:13px;" id="detalleDentroEntrada">-</span>
               </div>
+              
+              <!-- Foto Entrada -->
               <div style="display:flex;align-items:center;margin-bottom:8px;">
                 <span style="font-weight:500;color:#6c757d;width:80px;font-size:13px;">Foto:</span>
                 <div>
@@ -490,18 +567,21 @@
                   <div id="detalleFotoEntradaVacia" class="no-photo" style="width:80px;height:80px;display:none;font-size:24px;">📷</div>
                 </div>
               </div>
+
+              <!-- Link Mapa Entrada -->
               <div style="text-align:center;margin-top:10px;">
-                <a href="#" id="mapLinkEntrada" target="_blank" style="color:var(--primary);text-decoration:none;font-size:13px;">
+                <a href="#" id="mapLinkEntrada" target="_blank" style="color:var(--primary);text-decoration:none;font-size:13px;font-weight:600;">
                   <i class="bi bi-map"></i> Ver ubicación entrada
                 </a>
               </div>
             </div>
 
-            <!-- BLOQUE SALIDA -->
-            <div style="background-color:#f8f9fa;border-radius:12px;padding:16px;">
-              <div style="font-size:14px;font-weight:600;color:var(--text-color);margin-bottom:12px;display:flex;align-items:center;gap:6px;">
-                <i class="bi bi-box-arrow-left"></i> Salida
+            <!-- CARD 2: SALIDA -->
+            <div class="modal-card">
+              <div class="modal-card-title">
+                <i class="bi bi-box-arrow-left text-danger"></i> Salida
               </div>
+              
               <div style="display:flex;margin-bottom:8px;align-items:center;">
                 <span style="font-weight:500;color:#6c757d;width:80px;font-size:13px;">Fecha:</span>
                 <span style="color:#212529;font-size:13px;" id="detalleFechaSalida">-</span>
@@ -518,6 +598,8 @@
                 <span style="font-weight:500;color:#6c757d;width:80px;font-size:13px;">Estado:</span>
                 <span style="color:#212529;font-size:13px;" id="detalleDentroSalida">-</span>
               </div>
+
+              <!-- Foto Salida -->
               <div style="display:flex;align-items:center;margin-bottom:8px;">
                 <span style="font-weight:500;color:#6c757d;width:80px;font-size:13px;">Foto:</span>
                 <div>
@@ -525,16 +607,19 @@
                   <div id="detalleFotoSalidaVacia" class="no-photo" style="width:80px;height:80px;display:none;font-size:24px;">📷</div>
                 </div>
               </div>
+
+              <!-- Link Mapa Salida -->
               <div style="text-align:center;margin-top:10px;">
-                <a href="#" id="mapLinkSalida" target="_blank" style="color:var(--primary);text-decoration:none;font-size:13px;">
+                <a href="#" id="mapLinkSalida" target="_blank" style="color:var(--primary);text-decoration:none;font-size:13px;font-weight:600;">
                   <i class="bi bi-map"></i> Ver ubicación salida
                 </a>
               </div>
             </div>
           </div>
-          <!-- LOG DE APROBACIÓN (Visualización de aprobadores) -->
-          <div style="margin-top:20px; padding-top:20px; border-top:1px solid #eee;">
-            <div style="font-weight:600; margin-bottom:10px; color:var(--text-color);">Log de Aprobaciones:</div>
+
+          <!-- CARD 3 & 4: LOG DE APROBACIÓN -->
+          <div class="modal-log-box">
+            <div style="font-weight:600; margin-bottom:15px; color:var(--text-color);">Log de Aprobaciones:</div>
             <div style="display:flex; gap:20px;">
                <div style="flex:1;">
                  <small style="color:#6c757d;">Aprobado Supervisor:</small>
@@ -551,14 +636,15 @@
         </div>
       </div>
     </div>
+  </div>
 
-  <!-- ======================================================================
-   * 🧠 LÓGICA JAVASCRIPT (Frontend + Aprobación)
-   * ====================================================================== -->
+<!-- ======================================================================
+ * 🧠 LÓGICA JAVASCRIPT (Frontend + Aprobación + Stats)
+ ====================================================================== -->
   <script>
     let registrosData = [];
     let paginaActual = 1;
-    const registrosPorPagina = 8; // Cantidad de filas por pantalla
+    const registrosPorPagina = 8; 
     let autocompleteTimeout = null;
 
     // Función para convertir URL de Drive a Thumbnail
@@ -613,11 +699,11 @@
     // -------------------------------------------------------------------
     function cargarRegistros() {
       const filtros = {
-        fechaInicio: document.getElementById('fechaInicio').value,
-        fechaFin: document.getElementById('fechaFin').value,
-        cedula: document.getElementById('filtroCedula').value,
-        nombre: document.getElementById('filtroNombre').value,
-        centro: document.getElementById('filtroCentro').value
+          fechaInicio: document.getElementById('fechaInicio').value,
+          fechaFin: document.getElementById('fechaFin').value,
+          cedula: document.getElementById('filtroCedula').value,
+          nombre: document.getElementById('filtroNombre').value,
+          centro: document.getElementById('filtroCentro').value
       };
 
       document.getElementById('cuerpoTabla').innerHTML = `
@@ -629,15 +715,11 @@
 
       google.script.run
         .withSuccessHandler(function(res) {
-          if (!res || typeof res !== 'object') {
-            document.getElementById('cuerpoTabla').innerHTML = `<tr><td colspan="14" class="text-center text-danger py-5">❌ Error: el servidor no devolvió datos válidos.</td></tr>`;
-            return;
-          }
-
           if (res.status === 'ok') {
             registrosData = res.registros || [];
             paginaActual = 1;
             mostrarRegistros();
+            actualizarEstadisticas();
           } else {
             document.getElementById('cuerpoTabla').innerHTML = `<tr><td colspan="14" class="text-center text-danger py-5">${res.message || 'Error desconocido'}</td></tr>`;
           }
@@ -654,7 +736,22 @@
     }
 
     // -------------------------------------------------------------------
-    // 3. RENDERIZADO DE TABLA (Con Lógica de Aprobación)
+    // 3. ACTUALIZAR ESTADÍSTICAS (CONTADORES)
+    // -------------------------------------------------------------------
+    function actualizarEstadisticas() {
+      const total = registrosData.length;
+      const pendienteSup = registrosData.filter(r => r.estadoHE === 'Pendiente Supervisor').length;
+      const pendienteDir = registrosData.filter(r => r.estadoHE === 'Pendiente Director').length;
+      const aprobado = registrosData.filter(r => r.estadoHE === 'Aprobado').length;
+      
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statPendienteSup').textContent = pendienteSup;
+      document.getElementById('statPendienteDir').textContent = pendienteDir;
+      document.getElementById('statAprobado').textContent = aprobado;
+    }
+
+    // -------------------------------------------------------------------
+    // 4. RENDERIZADO DE TABLA (Con Lógica de Aprobación)
     // -------------------------------------------------------------------
     function mostrarRegistros() {
       const tbody = document.getElementById('cuerpoTabla');
@@ -744,7 +841,7 @@
     }
 
     // -------------------------------------------------------------------
-    // 4. FUNCIÓN DE APROBACIÓN (Conexión Backend)
+    // 5. FUNCIÓN DE APROBACIÓN (Conexión Backend)
     // -------------------------------------------------------------------
     function aprobarRegistro(fila, rol) {
       Swal.fire({
@@ -775,15 +872,13 @@
               // 2. Actualizar estado local
               if (rol === 'supervisor') {
                 registrosData[idxLocal].estadoHE = 'Pendiente Director';
-                // Guardamos log temporal para feedback (el backend guarda en hoja)
-                registrosData[idxLocal].aprobadoSuper = 'Usuario Actual'; 
               } else if (rol === 'director') {
                 registrosData[idxLocal].estadoHE = 'Aprobado';
-                registrosData[idxLocal].aprobadoDirector = 'Usuario Actual';
               }
               
               // 3. Re-renderizar la tabla para ver el cambio
               mostrarRegistros();
+              actualizarEstadisticas();
             }
           } else {
             Swal.fire('Error', res.message, 'error');
@@ -793,12 +888,11 @@
           Swal.close();
           Swal.fire('Error', 'No se pudo conectar con el servidor.', 'error');
         })
-        .aprobarHorasExtras(fila, rol, Session.getActiveUser().getEmail());
+        .aprobarHorasExtras(fila, rol); // Solo dos argumentos
     }
 
-
     // -------------------------------------------------------------------
-    // 5. PAGINACIÓN
+    // 6. PAGINACIÓN
     // -------------------------------------------------------------------
     function actualizarPaginacion() {
       const total = Math.ceil(registrosData.length / registrosPorPagina);
@@ -838,27 +932,22 @@
     }
 
     // -------------------------------------------------------------------
-    // 6. MODAL DE DETALLES
+    // 7. MODAL DE DETALLES (4 CARDS)
     // -------------------------------------------------------------------
     function mostrarDetalle(idx) {
       const r = registrosData[idx];
       
-      let fotoEnt = r.fotoEntrada || ''; 
-      let fotoSal = r.fotoSalida || '';
-
-      const urlEnt = convertirUrlDrive(fotoEnt);
-      const urlSal = convertirUrlDrive(fotoSal);
-      
-      function formatearFecha(isoString) {
+      // Funciones auxiliares
+      const formatearFecha = (isoString) => {
          if (!isoString) return '-';
          const str = String(isoString);
          if (str.length === 10 && str.includes('/')) return str;
          const d = new Date(isoString);
          if (isNaN(d.getTime())) return str;
          return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-      }
+      };
 
-      // --- ENTRADA ---
+      // --- CARD 1: ENTRADA ---
       document.getElementById('detalleFechaEntrada').textContent = formatearFecha(r.timestamp);
       document.getElementById('detalleHoraEntrada').textContent = formatoHora(r.horaEntrada);
       document.getElementById('detalleCentroEntrada').textContent = r.centro || '-';
@@ -867,8 +956,9 @@
       document.getElementById('detalleDentroEntrada').innerHTML =
         `<span class="badge badge-status ${dentroEnt ? 'bg-success' : 'bg-danger'}">${dentroEnt ? 'Dentro' : 'Fuera'}</span>`;
 
-      if (urlEnt) {
-        document.getElementById('detalleFotoEntrada').src = urlEnt;
+      let fotoEnt = r.fotoEntrada || '';
+      if (fotoEnt) {
+        document.getElementById('detalleFotoEntrada').src = convertirUrlDrive(fotoEnt);
         document.getElementById('detalleFotoEntrada').style.display = 'block';
         document.getElementById('detalleFotoEntradaVacia').style.display = 'none';
       } else {
@@ -883,7 +973,7 @@
         document.getElementById('mapLinkEntrada').style.display = 'none';
       }
 
-      // --- SALIDA ---
+      // --- CARD 2: SALIDA ---
       document.getElementById('detalleFechaSalida').textContent = formatearFecha(r.fechaSalida);
       document.getElementById('detalleHoraSalida').textContent = formatoHora(r.horaSalida);
       document.getElementById('detalleCentroSalida').textContent = r.centro || '-';
@@ -894,8 +984,9 @@
       document.getElementById('detalleDentroSalida').innerHTML =
         `<span class="badge badge-status ${esDentroSal ? 'bg-success' : 'bg-danger'}">${esDentroSal ? 'Dentro' : 'Fuera'}</span>`;
 
-      if (urlSal) {
-        document.getElementById('detalleFotoSalida').src = urlSal;
+      let fotoSal = r.fotoSalida || '';
+      if (fotoSal) {
+        document.getElementById('detalleFotoSalida').src = convertirUrlDrive(fotoSal);
         document.getElementById('detalleFotoSalida').style.display = 'block';
         document.getElementById('detalleFotoSalidaVacia').style.display = 'none';
       } else {
@@ -910,22 +1001,12 @@
         document.getElementById('mapLinkSalida').style.display = 'none';
       }
 
-      // --- LOG DE APROBACIÓN (Visualización) ---
-      // Leemos las columnas de aprobación que devuelve el backend
-      // Nota: Estas columnas se llenan en la hoja "Respuestas" por Code.gs
-      
-      const aprobSuper = r.aprobadoSuper || '-';
-      const aprobDir = r.aprobadoDirector || '-';
-      const fechaSuper = r.fechaApruebaSuper || '';
-      const fechaDir = r.fechaApruebaDirector || '';
+      // --- CARD 3 & 4: LOG DE APROBACIÓN ---
+      document.getElementById('logAprobadoSuper').textContent = r.aprobadoSuper || '-';
+      document.getElementById('logFechaSuper').textContent = r.fechaApruebaSuper || '';
 
-      const superDiv = document.getElementById('logAprobadoSuper');
-      superDiv.textContent = aprobSuper;
-      document.getElementById('logFechaSuper').textContent = fechaSuper;
-
-      const dirDiv = document.getElementById('logAprobadoDir');
-      dirDiv.textContent = aprobDir;
-      document.getElementById('logFechaDir').textContent = fechaDir;
+      document.getElementById('logAprobadoDir').textContent = r.aprobadoDirector || '-';
+      document.getElementById('logFechaDir').textContent = r.fechaApruebaDirector || '';
 
       // Mostrar Modal
       document.getElementById('detalleModal').style.display = 'block';
@@ -936,7 +1017,7 @@
     }
 
     // -------------------------------------------------------------------
-    // 7. VISOR DE FOTOS
+    // 8. VISOR DE FOTOS
     // -------------------------------------------------------------------
     function openPhotoModal(url) {
       document.getElementById('modalImage').src = url.replace('sz=s1000', 'sz=s1200');
@@ -948,15 +1029,15 @@
     }
 
     // -------------------------------------------------------------------
-    // 8. EXPORTAR CSV
+    // 9. EXPORTAR CSV
     // -------------------------------------------------------------------
     function exportarRegistros() {
       const filtros = {
-        fechaInicio: document.getElementById('fechaInicio').value,
-        fechaFin: document.getElementById('fechaFin').value,
-        cedula: document.getElementById('filtroCedula').value,
-        nombre: document.getElementById('filtroNombre').value,
-        centro: document.getElementById('filtroCentro').value
+          fechaInicio: document.getElementById('fechaInicio').value,
+          fechaFin: document.getElementById('fechaFin').value,
+          cedula: document.getElementById('filtroCedula').value,
+          nombre: document.getElementById('filtroNombre').value,
+          centro: document.getElementById('filtroCentro').value
       };
 
       Swal.fire({ title: 'Exportando...', didOpen: () => Swal.showLoading() });
@@ -986,7 +1067,7 @@
     }
 
     // -------------------------------------------------------------------
-    // 9. AUTOCOMPLETADO
+    // 10. AUTOCOMPLETADO
     // -------------------------------------------------------------------
     function buscarAutocomplete(tipo) {
       clearTimeout(autocompleteTimeout);
