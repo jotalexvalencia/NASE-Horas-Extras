@@ -572,65 +572,140 @@ function buscarEmpleadoPorCedulaEnLibro(cedula) {
  * 
  * @returns {Object} Estructura JSON para el formulario.
  */
+// ===================================================================
+// 2. DATOS DE CENTROS (Leer de Libro Externo) - CORREGIDO
+// ===================================================================
+
+/**
+ * @summary Obtiene los datos de centros del libro externo con coordenadas.
+ * @description Lee Ciudad, Centro, LAT REF, LNG REF y RADIO del libro de centros.
+ * @returns {Object} Estructura JSON con coordenadas para el formulario.
+ */
 function getCentrosData() {
-  // ID del libro Base Operativa (Donde están los datos crudos)
+  // ID del libro donde están los Centros
   const ID_LIBRO_CENTROS = "1PchIxXq617RRL556vHui4ImG7ms2irxiY3fPLIoqcQc"; 
   
   try {
     // 1. Abrir Libro Externo
     const ssExterno = SpreadsheetApp.openById(ID_LIBRO_CENTROS);
     
-    // 2. Buscar la hoja. Probamos con "BASE_CENTROS" primero, luego "Centros"
-    let hojaCentros = ssExterno.getSheetByName("BASE_CENTROS");
-    if (!hojaCentros) hojaCentros = ssExterno.getSheetByName("Centros");
+    // 2. Buscar la hoja "Centros" (como indicaste que se llama)
+    let hojaCentros = ssExterno.getSheetByName("Centros");
+    if (!hojaCentros) hojaCentros = ssExterno.getSheetByName("BASE_CENTROS");
     
     if (!hojaCentros) {
-      Logger.log("⚠️ No se encontró ni la hoja 'BASE_CENTROS' ni 'Centros' en el libro externo.");
-      return { structured: [], data: [] };
+      Logger.log("⚠️ No se encontró la hoja 'Centros' en el libro externo.");
+      return { structured: {}, data: [] };
     }
 
     // 3. Leer Datos
     const data = hojaCentros.getDataRange().getValues();
-    if (!data || data.length < 2) return { structured: [], data: [] };
-
-    const headers = data[0].map(h => String(h).toUpperCase().trim()); // Poner todo en mayúsculas para comparar fácil
-    const rows = data.slice(1);
-
-    // 4. Mapear Índices (Buscamos exactamente "CIUDAD" y "CENTRO")
-    const idxCiudad = headers.indexOf("CIUDAD");
-    const idxCentro = headers.indexOf("CENTRO");
-
-    if (idxCiudad === -1 || idxCentro === -1) {
-      Logger.log("❌ Error crítico: No se encontraron columnas 'Ciudad' o 'Centro' en el libro externo.");
-      Logger.log("Encabezados encontrados: " + headers.join(" | "));
-      return { structured: [], data: [] };
+    if (!data || data.length < 2) {
+      Logger.log("⚠️ Hoja Centros vacía o sin datos.");
+      return { structured: {}, data: [] };
     }
 
-    // 5. Generar Array Estructurado para el Formulario
-    // El formulario espera: structured: [ { ciudad: '...', centro: '...' } ]
-    const structuredData = [];
+    // 4. Mapear encabezados (convertir a mayúsculas para comparar)
+    const headers = data[0].map(function(h) { 
+      return String(h).toUpperCase().trim(); 
+    });
+    const rows = data.slice(1);
+
+    // 5. Buscar índices de columnas
+    // Columnas esperadas: Ciudad, Centro, LAT REF, LNG REF, RADIO
+    const idxCiudad = headers.findIndex(function(h) { return h === "CIUDAD"; });
+    const idxCentro = headers.findIndex(function(h) { return h === "CENTRO"; });
+    const idxLat = headers.findIndex(function(h) { 
+      return h === "LAT REF" || h === "LAT" || h === "LATITUD"; 
+    });
+    const idxLng = headers.findIndex(function(h) { 
+      return h === "LNG REF" || h === "LNG" || h === "LONGITUD" || h === "LON"; 
+    });
+    const idxRadio = headers.findIndex(function(h) { 
+      return h === "RADIO" || h === "RADIO_M" || h === "METROS"; 
+    });
+
+    // Log para debugging
+    Logger.log("📊 Encabezados encontrados: " + headers.join(" | "));
+    Logger.log("📍 Índices -> Ciudad:" + idxCiudad + " Centro:" + idxCentro + 
+               " Lat:" + idxLat + " Lng:" + idxLng + " Radio:" + idxRadio);
+
+    if (idxCiudad === -1 || idxCentro === -1) {
+      Logger.log("❌ Error crítico: No se encontraron columnas 'Ciudad' o 'Centro'.");
+      return { structured: {}, data: [] };
+    }
+
+    if (idxLat === -1 || idxLng === -1) {
+      Logger.log("❌ Error crítico: No se encontraron columnas 'LAT REF' o 'LNG REF'.");
+      return { structured: {}, data: [] };
+    }
+
+    // 6. Generar objeto estructurado para el formulario
+    // El frontend espera: { "clave": { ciudad, centro, lat, lng, radio }, ... }
+    const structuredData = {};
+    let countValid = 0;
+    let countInvalid = 0;
     
     for (let i = 0; i < rows.length; i++) {
-      const ciudad = rows[i][idxCiudad] ? String(rows[i][idxCiudad]).trim() : "";
-      const centro = rows[i][idxCentro] ? String(rows[i][idxCentro]).trim() : "";
+      const row = rows[i];
+      const ciudad = row[idxCiudad] ? String(row[idxCiudad]).trim() : "";
+      const centro = row[idxCentro] ? String(row[idxCentro]).trim() : "";
       
-      // Solo agregamos si ambos tienen datos
-      if (ciudad && centro) {
-        structuredData.push({ 
+      // Parsear coordenadas (manejar comas decimales)
+      let lat = 0, lng = 0, radio = 30; // Radio por defecto: 30 metros
+      
+      if (idxLat !== -1 && row[idxLat] !== undefined && row[idxLat] !== "") {
+        const latStr = String(row[idxLat]).replace(',', '.');
+        lat = parseFloat(latStr);
+      }
+      
+      if (idxLng !== -1 && row[idxLng] !== undefined && row[idxLng] !== "") {
+        const lngStr = String(row[idxLng]).replace(',', '.');
+        lng = parseFloat(lngStr);
+      }
+      
+      if (idxRadio !== -1 && row[idxRadio] !== undefined && row[idxRadio] !== "") {
+        radio = parseInt(row[idxRadio]) || 30;
+      }
+      
+      // Validar que tenga datos mínimos necesarios
+      if (ciudad && centro && !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+        // Crear clave única para evitar duplicados
+        const key = ciudad.toUpperCase().replace(/\s+/g, '_') + '|' + 
+                    centro.toUpperCase().replace(/\s+/g, '_');
+        
+        structuredData[key] = { 
           ciudad: ciudad, 
-          centro: centro 
-        });
+          centro: centro,
+          lat: lat,
+          lng: lng,
+          radio: radio
+        };
+        countValid++;
+      } else {
+        countInvalid++;
+        // Log para debugging de filas problemáticas
+        if (i < 5) { // Solo logear las primeras 5 inválidas
+          Logger.log("⚠️ Fila " + (i+2) + " inválida: Ciudad='" + ciudad + 
+                     "' Centro='" + centro + "' Lat=" + lat + " Lng=" + lng);
+        }
       }
     }
 
-    // 6. Retornar Datos
-    Logger.log(`✅ Centros cargados desde Externo: ${structuredData.length} registros encontrados.`);
+    // 7. Log resumen
+    Logger.log("✅ Centros cargados: " + countValid + " válidos, " + countInvalid + " omitidos.");
+    
+    // Log de muestra (primeros 3 centros)
+    const keys = Object.keys(structuredData);
+    for (let j = 0; j < Math.min(3, keys.length); j++) {
+      Logger.log("   📍 " + keys[j] + " -> " + JSON.stringify(structuredData[keys[j]]));
+    }
+    
     return { structured: structuredData, data: data };
 
   } catch (e) {
     Logger.log("❌ Error en getCentrosData: " + e.toString());
-    // Si falla la lectura externa, devolvemos vacío para no romper el formulario
-    return { structured: [], data: [] };
+    return { structured: {}, data: [] };
   }
 }
 
