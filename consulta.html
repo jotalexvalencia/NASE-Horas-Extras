@@ -4,22 +4,20 @@
  * ----------------------------------------------------------------------
 /**
  * @summary Dashboard web para control de Horas Extras.
- * @description 
- * Interfaz administrativa con capacidades de aprobación:
+ * @description Interfaz administrativa con capacidades de aprobación:
  * - Visualización de turnos.
  * - Filtros avanzados.
  * - APROBACIÓN DE HORAS EXTRAS (Supervisor y Director).
+ * - ESTADÍSTICAS: Total, Pendientes, Aprobados, En Sitio, Fuera.
  *
  * @features
- *   - 🔍 **Filtros:** Fecha, Cédula, Nombre, Centro.
+ *   - 📊 **Stats Box:** Contadores de registros y estados de aprobación.
+ *   - 📍 **Ubicación:** Tarjetas para contar cuántos están "En Sitio" vs "Fuera".
  *   - 🚦 **Columna Estado:** Visualiza si está Pendiente Supervisor, Director o Aprobado.
  *   - ✅ **Aprobación Integrada:** Botones para aprobar registros según el rol del usuario.
- *   - 🖼️ **Visor de Fotos:** Modal ampliable.
- *   - 📝 **Detalles:** Modal con 4 tarjetas (Entrada, Salida, Log).
- *   - 📊 **Contadores:** Panel superior con estadísticas de aprobación.
  *
  * @author NASE Team
- * @version 2.2 (Corrección Cards + Contadores)
+ * @version 2.3 (Tarjetas En Sitio + Depuración Permisos)
  ======================================================================= -->
 <html lang="es">
 <head>
@@ -34,7 +32,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script> 
  
   <!-- ======================================================================
-   * 🎨 ESTILOS CSS (Estilo Asistencia + Modal Cards)
+   * 🎨 ESTILOS CSS
    * ====================================================================== -->
   <style>
     :root {
@@ -43,6 +41,8 @@
       --primary: #0b6efd;
       --success: #198754;
       --text-color: #17365D;
+      --warning-site: #0dcaf0; /* Color verde para "En Sitio" */
+      --danger-site: #dc3545; /* Color rojo para "Fuera" */
     }
    
     html, body {
@@ -57,7 +57,7 @@
    
     .app-container {
       width: 100%;
-      max-width: 1400px;
+      max-width: 1600px; /* Más ancho para las 6 tarjetas */
       margin: 0 auto;
       padding: 20px;
     }
@@ -98,7 +98,7 @@
     }
     .stats-num { font-size: 1.6rem; font-weight: 600; color: var(--text-color); line-height: 1.2; }
     .stats-label { color: #6c757d; font-size: 0.8rem; font-weight: 500; text-transform: uppercase; }
-   
+
     .filters-card {
       background: var(--card);
       border-radius: 16px;
@@ -410,30 +410,49 @@
  ====================================================================== -->
 <body>
   <div class="app-container">
-    <!-- 0. PANEL DE ESTADÍSTICAS (Stats Box) -->
+    
+    <!-- 0. PANEL DE ESTADÍSTICAS (Stats Box Actualizado) -->
     <div class="row g-3 mb-4">
-      <div class="col-6 col-md-3">
+      <!-- 1. TOTAL -->
+      <div class="col-6 col-md-2">
         <div class="stats-box">
           <div class="stats-num" id="statTotal">0</div>
           <div class="stats-label">Registros</div>
         </div>
       </div>
-      <div class="col-6 col-md-3">
+      <!-- 2. PENDIENTE SUPERVISOR -->
+      <div class="col-6 col-md-2">
         <div class="stats-box">
           <div class="stats-num text-warning" id="statPendienteSup">0</div>
-          <div class="stats-label">Pendiente Supervisor</div>
+          <div class="stats-label">Pendiente Super</div>
         </div>
       </div>
-      <div class="col-6 col-md-3">
+      <!-- 3. PENDIENTE DIRECTOR -->
+      <div class="col-6 col-md-2">
         <div class="stats-box">
           <div class="stats-num text-danger" id="statPendienteDir">0</div>
           <div class="stats-label">Pendiente Director</div>
         </div>
       </div>
-      <div class="col-6 col-md-3">
+      <!-- 4. APROBADO -->
+      <div class="col-6 col-md-2">
         <div class="stats-box">
           <div class="stats-num text-success" id="statAprobado">0</div>
           <div class="stats-label">Aprobado</div>
+        </div>
+      </div>
+      <!-- 5. EN SITIO (NUEVO) -->
+      <div class="col-6 col-md-2">
+        <div class="stats-box">
+          <div class="stats-num text-success" style="color: var(--warning-site) !important;" id="statEnSitio">0</div>
+          <div class="stats-label">En Sitio</div>
+        </div>
+      </div>
+      <!-- 6. FUERA (NUEVO) -->
+      <div class="col-6 col-md-2">
+        <div class="stats-box">
+          <div class="stats-num text-danger" style="color: var(--danger-site) !important;" id="statFuera">0</div>
+          <div class="stats-label">Fuera</div>
         </div>
       </div>
     </div>
@@ -525,18 +544,17 @@
       <img style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);max-width:90%;max-height:90%;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);" id="modalImage">
     </div>
    
-    <!-- 6. MODAL DE DETALLES (CON 4 CARDS) -->
+    <!-- 6. MODAL DETALLES (CON 4 TARJETAS) -->
     <div id="detalleModal" style="display:none;position:fixed;z-index:2000;left:0;top:0;width:100%;height:100%;background-color:rgba(0,0,0,0.5);overflow-y:auto;">
       <div style="background-color:#fff;margin:2% auto;padding:0;border-radius:16px;width:90%;max-width:900px;box-shadow:0 10px 40px rgba(0,0,0,0.2);overflow:hidden;">
         <div style="background:linear-gradient(135deg,var(--primary),#0a58ca);color:white;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;">
           <h3 style="font-size:18px;font-weight:600;margin:0;">Detalles del Registro</h3>
           <button style="color:white;font-size:24px;font-weight:bold;background:none;border:none;opacity:0.8;" onclick="closeDetalleModal()">&times;</button>
         </div>
-        
         <div style="padding:20px;">
-          <div style="display:grid;grid-template-columns: 1fr 1fr;gap:20px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:20px;">
             
-            <!-- CARD 1: ENTRADA -->
+            <!-- TARJETA 1: ENTRADA -->
             <div class="modal-card">
               <div class="modal-card-title">
                 <i class="bi bi-box-arrow-in-right text-success"></i> Entrada
@@ -558,7 +576,6 @@
                 <span style="font-weight:500;color:#6c757d;width:80px;font-size:13px;">Estado:</span>
                 <span style="color:#212529;font-size:13px;" id="detalleDentroEntrada">-</span>
               </div>
-              
               <!-- Foto Entrada -->
               <div style="display:flex;align-items:center;margin-bottom:8px;">
                 <span style="font-weight:500;color:#6c757d;width:80px;font-size:13px;">Foto:</span>
@@ -567,16 +584,15 @@
                   <div id="detalleFotoEntradaVacia" class="no-photo" style="width:80px;height:80px;display:none;font-size:24px;">📷</div>
                 </div>
               </div>
-
               <!-- Link Mapa Entrada -->
               <div style="text-align:center;margin-top:10px;">
-                <a href="#" id="mapLinkEntrada" target="_blank" style="color:var(--primary);text-decoration:none;font-size:13px;font-weight:600;">
+                <a href="#" id="mapLinkEntrada" target="_blank" style="color:var(--primary);text-decoration:none;font-size:13px;">
                   <i class="bi bi-map"></i> Ver ubicación entrada
                 </a>
               </div>
             </div>
 
-            <!-- CARD 2: SALIDA -->
+            <!-- TARJETA 2: SALIDA -->
             <div class="modal-card">
               <div class="modal-card-title">
                 <i class="bi bi-box-arrow-left text-danger"></i> Salida
@@ -598,7 +614,6 @@
                 <span style="font-weight:500;color:#6c757d;width:80px;font-size:13px;">Estado:</span>
                 <span style="color:#212529;font-size:13px;" id="detalleDentroSalida">-</span>
               </div>
-
               <!-- Foto Salida -->
               <div style="display:flex;align-items:center;margin-bottom:8px;">
                 <span style="font-weight:500;color:#6c757d;width:80px;font-size:13px;">Foto:</span>
@@ -607,17 +622,15 @@
                   <div id="detalleFotoSalidaVacia" class="no-photo" style="width:80px;height:80px;display:none;font-size:24px;">📷</div>
                 </div>
               </div>
-
               <!-- Link Mapa Salida -->
               <div style="text-align:center;margin-top:10px;">
-                <a href="#" id="mapLinkSalida" target="_blank" style="color:var(--primary);text-decoration:none;font-size:13px;font-weight:600;">
+                <a href="#" id="mapLinkSalida" target="_blank" style="color:var(--primary);text-decoration:none;font-size:13px;">
                   <i class="bi bi-map"></i> Ver ubicación salida
                 </a>
               </div>
             </div>
           </div>
-
-          <!-- CARD 3 & 4: LOG DE APROBACIÓN -->
+          <!-- TARJETA 3 & 4: LOG DE APROBACIÓN -->
           <div class="modal-log-box">
             <div style="font-weight:600; margin-bottom:15px; color:var(--text-color);">Log de Aprobaciones:</div>
             <div style="display:flex; gap:20px;">
@@ -669,7 +682,7 @@
     function formatearFechaParaTabla(inputDate) {
       if (!inputDate) return '-';
       const str = String(inputDate);
-      if (str.length === 10 && str.includes('/')) return str; // dd/mm/yyyy
+      if (str.length === 10 && str.includes('/')) return str; 
       try {
         const date = new Date(inputDate);
         if (isNaN(date.getTime())) return str;
@@ -736,7 +749,7 @@
     }
 
     // -------------------------------------------------------------------
-    // 3. ACTUALIZAR ESTADÍSTICAS (CONTADORES)
+    // 3. ACTUALIZAR ESTADÍSTICAS (Contadores Actualizados)
     // -------------------------------------------------------------------
     function actualizarEstadisticas() {
       const total = registrosData.length;
@@ -744,14 +757,20 @@
       const pendienteDir = registrosData.filter(r => r.estadoHE === 'Pendiente Director').length;
       const aprobado = registrosData.filter(r => r.estadoHE === 'Aprobado').length;
       
+      // Contar En Sitio vs Fuera (Basado en "DentroCentro")
+      const enSitio = registrosData.filter(r => ['sí', 'si'].includes(String(r.dentroCentro).toLowerCase())).length;
+      const fuera = total - enSitio;
+
       document.getElementById('statTotal').textContent = total;
       document.getElementById('statPendienteSup').textContent = pendienteSup;
       document.getElementById('statPendienteDir').textContent = pendienteDir;
       document.getElementById('statAprobado').textContent = aprobado;
+      document.getElementById('statEnSitio').textContent = enSitio;
+      document.getElementById('statFuera').textContent = fuera;
     }
 
     // -------------------------------------------------------------------
-    // 4. RENDERIZADO DE TABLA (Con Lógica de Aprobación)
+    // 4. RENDERIZADO DE TABLA
     // -------------------------------------------------------------------
     function mostrarRegistros() {
       const tbody = document.getElementById('cuerpoTabla');
@@ -785,15 +804,13 @@
         let estadoBadge = '';
         let accionesHtml = '';
 
-        // Verificar si tiene salida (Incompleto vs Completo)
         const tieneSalida = r.fechaSalida && r.horaSalida;
 
         if (!tieneSalida) {
           estadoBadge = '<span class="badge-status badge-incompleto">Incompleto</span>';
           accionesHtml = '<button class="btn btn-sm btn-outline-secondary" disabled><i class="bi bi-lock"></i></button>';
         } else {
-          // Tiene salida, evaluamos el estado de HE
-          const estado = r.estadoHE || ''; // "Pendiente Supervisor", "Pendiente Director", "Aprobado", etc.
+          const estado = r.estadoHE || ''; 
 
           if (estado === 'Pendiente Supervisor') {
             estadoBadge = '<span class="badge-status badge-pendiente-super">Pendiente Supervisor</span>';
@@ -805,13 +822,11 @@
             estadoBadge = '<span class="badge-status badge-aprobado">Aprobado</span>';
             accionesHtml = `<span style="color:#198754; font-weight:bold;"><i class="bi bi-check-circle"></i> Aprobado</span>`;
           } else {
-            // Estado vacío o desconocido, asumo pendiente supervisor
             estadoBadge = '<span class="badge-status badge-pendiente-super">Pendiente Supervisor</span>';
             accionesHtml = `<button class="btn-aprobar btn-aprobar-sup" onclick="aprobarRegistro(${r.fila}, 'supervisor')"><i class="bi bi-check-circle-fill"></i> Aprobar (Sup)</button>`;
           }
         }
 
-        // Botón Ver Detalle (Independiente de aprobación)
         const btnDetalle = `<button class="btn-ver-detalle" onclick="mostrarDetalle(${idxGlobal})"><i class="bi bi-eye-fill"></i></button>`;
 
         const row = `
@@ -841,14 +856,17 @@
     }
 
     // -------------------------------------------------------------------
-    // 5. FUNCIÓN DE APROBACIÓN (Conexión Backend)
-    // -------------------------------------------------------------------
-    function aprobarRegistro(fila, rol) {
+    // 5. FUNCIÓN DE APROBACIÓN (Solo envía datos)
+    // -------------------------------------------------------------------        
+    function aprobarRegistro(fila) {
+      // Nota: Ya NO enviamos el rol ('supervisor' o 'director').
+      // El backend `aprobarHorasExtras` detecta tu rol por tu correo automáticamente.
+      
       Swal.fire({
-        title: 'Aprobando...',
-        text: 'Procesando solicitud en el servidor...',
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading()
+          title: 'Aprobando...',
+          text: 'Validando permisos y procesando...',
+          allowOutsideClick: false,
+          didOpen: () => Swal.showLoading()
       });
 
       google.script.run
@@ -856,40 +874,36 @@
           Swal.close();
           
           if (res.status === 'ok') {
+            // El backend nos dice qué pasó, pero para efectos visuales
+            // vamos a refrescar los datos para ver el nuevo estado.
             Swal.fire({
               icon: 'success',
               title: '¡Aprobado!',
               text: res.message,
               timer: 1500,
               showConfirmButton: false
+            }).then(() => {
+               cargarRegistros(); // Recargar tabla para ver el nuevo estado
             });
-
-            // --- ACTUALIZACIÓN LOCAL (UI instantánea sin recargar todo) ---
-            // 1. Buscar el registro en el array local
-            const idxLocal = registrosData.findIndex(r => r.fila === fila);
-            
-            if (idxLocal !== -1) {
-              // 2. Actualizar estado local
-              if (rol === 'supervisor') {
-                registrosData[idxLocal].estadoHE = 'Pendiente Director';
-              } else if (rol === 'director') {
-                registrosData[idxLocal].estadoHE = 'Aprobado';
-              }
-              
-              // 3. Re-renderizar la tabla para ver el cambio
-              mostrarRegistros();
-              actualizarEstadisticas();
-            }
           } else {
-            Swal.fire('Error', res.message, 'error');
+            // Si es error de permisos, el backend devuelve el mensaje específico
+            // Ej: "Solo el Director Nacional puede dar la aprobación final."
+            Swal.fire({
+              icon: 'error',
+              title: 'Permiso Denegado',
+              text: res.message,
+              confirmButtonText: 'Entendido',
+              confirmButtonColor: '#dc3545'
+            });
           }
         })
         .withFailureHandler(function(err) {
           Swal.close();
           Swal.fire('Error', 'No se pudo conectar con el servidor.', 'error');
         })
-        .aprobarHorasExtras(fila, rol); // Solo dos argumentos
+        .aprobarHorasExtras(fila); // Solo pasamos la fila
     }
+
 
     // -------------------------------------------------------------------
     // 6. PAGINACIÓN
@@ -932,33 +946,37 @@
     }
 
     // -------------------------------------------------------------------
-    // 7. MODAL DE DETALLES (4 CARDS)
+    // 7. MODAL DE DETALLES
     // -------------------------------------------------------------------
     function mostrarDetalle(idx) {
       const r = registrosData[idx];
       
-      // Funciones auxiliares
-      const formatearFecha = (isoString) => {
+      let fotoEnt = r.fotoEntrada || ''; 
+      let fotoSal = r.fotoSalida || '';
+
+      const urlEnt = convertirUrlDrive(fotoEnt);
+      const urlSal = convertirUrlDrive(fotoSal);
+      
+      function formatearFecha(isoString) {
          if (!isoString) return '-';
          const str = String(isoString);
          if (str.length === 10 && str.includes('/')) return str;
          const d = new Date(isoString);
          if (isNaN(d.getTime())) return str;
          return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-      };
+      }
 
-      // --- CARD 1: ENTRADA ---
+      // --- ENTRADA ---
       document.getElementById('detalleFechaEntrada').textContent = formatearFecha(r.timestamp);
       document.getElementById('detalleHoraEntrada').textContent = formatoHora(r.horaEntrada);
       document.getElementById('detalleCentroEntrada').textContent = r.centro || '-';
       
       const dentroEnt = ['sí', 'si'].includes(String(r.dentroCentro).toLowerCase());
       document.getElementById('detalleDentroEntrada').innerHTML =
-        `<span class="badge badge-status ${dentroEnt ? 'bg-success' : 'bg-danger'}">${dentroEnt ? 'Dentro' : 'Fuera'}</span>`;
+        `<span class="badge badge-status ${dentroEnt ? 'bg-success' : 'bg-danger'}">${dentroEnt ? 'En Sitio' : 'Fuera'}</span>`;
 
-      let fotoEnt = r.fotoEntrada || '';
-      if (fotoEnt) {
-        document.getElementById('detalleFotoEntrada').src = convertirUrlDrive(fotoEnt);
+      if (urlEnt) {
+        document.getElementById('detalleFotoEntrada').src = urlEnt;
         document.getElementById('detalleFotoEntrada').style.display = 'block';
         document.getElementById('detalleFotoEntradaVacia').style.display = 'none';
       } else {
@@ -973,7 +991,7 @@
         document.getElementById('mapLinkEntrada').style.display = 'none';
       }
 
-      // --- CARD 2: SALIDA ---
+      // --- SALIDA ---
       document.getElementById('detalleFechaSalida').textContent = formatearFecha(r.fechaSalida);
       document.getElementById('detalleHoraSalida').textContent = formatoHora(r.horaSalida);
       document.getElementById('detalleCentroSalida').textContent = r.centro || '-';
@@ -982,11 +1000,10 @@
       const esDentroSal = ['sí', 'si'].includes(String(dentroSal).toLowerCase());
       
       document.getElementById('detalleDentroSalida').innerHTML =
-        `<span class="badge badge-status ${esDentroSal ? 'bg-success' : 'bg-danger'}">${esDentroSal ? 'Dentro' : 'Fuera'}</span>`;
+        `<span class="badge badge-status ${esDentroSal ? 'bg-success' : 'bg-danger'}">${esDentroSal ? 'En Sitio' : 'Fuera'}</span>`;
 
-      let fotoSal = r.fotoSalida || '';
-      if (fotoSal) {
-        document.getElementById('detalleFotoSalida').src = convertirUrlDrive(fotoSal);
+      if (urlSal) {
+        document.getElementById('detalleFotoSalida').src = urlSal;
         document.getElementById('detalleFotoSalida').style.display = 'block';
         document.getElementById('detalleFotoSalidaVacia').style.display = 'none';
       } else {
@@ -1001,14 +1018,18 @@
         document.getElementById('mapLinkSalida').style.display = 'none';
       }
 
-      // --- CARD 3 & 4: LOG DE APROBACIÓN ---
-      document.getElementById('logAprobadoSuper').textContent = r.aprobadoSuper || '-';
-      document.getElementById('logFechaSuper').textContent = r.fechaApruebaSuper || '';
+      // --- LOG DE APROBACIÓN ---
+      const aprobSuper = r.aprobadoSuper || '-';
+      const aprobDir = r.aprobadoDirector || '-';
+      const fechaSuper = r.fechaApruebaSuper || '';
+      const fechaDir = r.fechaApruebaDirector || '';
 
-      document.getElementById('logAprobadoDir').textContent = r.aprobadoDirector || '-';
-      document.getElementById('logFechaDir').textContent = r.fechaApruebaDirector || '';
+      document.getElementById('logAprobadoSuper').textContent = aprobSuper;
+      document.getElementById('logFechaSuper').textContent = fechaSuper;
 
-      // Mostrar Modal
+      document.getElementById('logAprobadoDir').textContent = aprobDir;
+      document.getElementById('logFechaDir').textContent = fechaDir;
+
       document.getElementById('detalleModal').style.display = 'block';
     }
 
