@@ -103,7 +103,8 @@ const PERMISOS_CONSULTA = [
 
 // Lista de Director Nacional de Operaciones (Puede aprobar el segundo nivel)
 const PERMISOS_DIRECTOR = [
-  "directornacionaloperaciones@nasecolombia.com.co"
+  "directornacionaloperaciones@nasecolombia.com.co",
+  "analistaprogramador@nasecolombia.com.co"
 ];
 
 // Los permisos de asistencia y centros se mantienen igual
