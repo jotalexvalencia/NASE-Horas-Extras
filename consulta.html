@@ -17,7 +17,7 @@
  *   - ✅ **Aprobación Integrada:** Botones para aprobar registros según el rol del usuario.
  *
  * @author NASE Team
- * @version 2.3 (Tarjetas En Sitio + Depuración Permisos)
+ * @version 2.4 (Reordenado Header -> Stats -> Filtros -> Tabla)
  ======================================================================= -->
 <html lang="es">
 <head>
@@ -57,11 +57,12 @@
    
     .app-container {
       width: 100%;
-      max-width: 1600px; /* Más ancho para las 6 tarjetas */
+      max-width: 1600px;
       margin: 0 auto;
       padding: 20px;
     }
    
+    /* 1. CABECERA */
     .header {
       background: var(--card);
       padding: 15px 30px;
@@ -83,7 +84,7 @@
       padding: 0 20px;
     }
    
-    /* Estilo de Estadísticas (Stats Box) */
+    /* 2. ESTADÍSTICAS (Stats Box) */
     .stats-box {
       background: white;
       padding: 15px;
@@ -99,6 +100,7 @@
     .stats-num { font-size: 1.6rem; font-weight: 600; color: var(--text-color); line-height: 1.2; }
     .stats-label { color: #6c757d; font-size: 0.8rem; font-weight: 500; text-transform: uppercase; }
 
+    /* 3. FILTROS */
     .filters-card {
       background: var(--card);
       border-radius: 16px;
@@ -184,6 +186,7 @@
     }
     .btn-aprobar-dir:hover { background-color: #b02a37; }
    
+    /* 4. TABLA */
     .table-container {
       max-height: 700px;
       overflow-y: auto;
@@ -292,7 +295,7 @@
     .badge-aprobado { background-color: #198754; color: #fff; }
     .badge-incompleto { background-color: #6c757d; color: #fff; }
    
-    /* Paginación */
+    /* 5. PAGINACIÓN */
     .pagination-container {
       display: flex;
       justify-content: center;
@@ -341,6 +344,7 @@
       cursor: not-allowed;
     }
    
+    /* 6. MODALES Y TARJETAS INTERNAS */
     .autocomplete-suggestions {
       position: absolute;
       border: 1px solid #ddd;
@@ -364,7 +368,6 @@
       border-bottom: none;
     }
    
-    /* ESTILOS DEL MODAL (CARDS) */
     .modal-card {
       background: #f8f9fa;
       border-radius: 12px;
@@ -406,12 +409,19 @@
 </head>
 
 <!-- ======================================================================
- * 📐 ESTRUCTURA HTML
+ * 📐 ESTRUCTURA HTML (ORDEN: 1. Header -> 2. Stats -> 3. Filtros -> 4. Tabla)
  ====================================================================== -->
 <body>
   <div class="app-container">
-    
-    <!-- 0. PANEL DE ESTADÍSTICAS (Stats Box Actualizado) -->
+
+    <!-- 1. CABECERA -->
+    <div class="header">
+      <img src="https://raw.githubusercontent.com/jotalexvalencia/NASE/main/Logo_Nase.png" alt="NASE" class="logo">
+      <h2 class="page-title">Control y Aprobación de Horas Extras</h2>
+      <div style="width: 80px;"></div>
+    </div>
+
+    <!-- 2. PANEL DE ESTADÍSTICAS (Stats Box) -->
     <div class="row g-3 mb-4">
       <!-- 1. TOTAL -->
       <div class="col-6 col-md-2">
@@ -456,15 +466,8 @@
         </div>
       </div>
     </div>
-
-    <!-- 1. CABECERA -->
-    <div class="header">
-      <img src="https://raw.githubusercontent.com/jotalexvalencia/NASE/main/Logo_Nase.png" alt="NASE" class="logo">
-      <h2 class="page-title">Control y Aprobación de Horas Extras</h2>
-      <div style="width: 80px;"></div>
-    </div>
    
-    <!-- 2. TARJETA DE FILTROS -->
+    <!-- 3. TARJETA DE FILTROS -->
     <div class="filters-card">
       <div class="row g-3">
         <div class="col-md-3">
@@ -501,7 +504,7 @@
       </div>
     </div>
    
-    <!-- 3. TABLA DE REGISTROS -->
+    <!-- 4. TABLA DE REGISTROS -->
     <div class="table-container">
       <table class="table" id="tablaRegistros">
         <thead>
@@ -533,18 +536,18 @@
       </table>
     </div>
    
-    <!-- 4. PAGINACIÓN -->
+    <!-- 5. PAGINACIÓN -->
     <div class="pagination-container">
       <ul class="pagination" id="paginacion"></ul>
     </div>
    
-    <!-- 5. MODAL VISOR DE FOTOS -->
+    <!-- 6. MODAL VISOR DE FOTOS -->
     <div id="photoModal" style="display:none;position:fixed;z-index:2000;left:0;top:0;width:100%;height:100%;background-color:rgba(0,0,0,0.8);cursor:pointer;">
       <span style="position:absolute;top:20px;right:30px;color:#fff;font-size:40px;font-weight:bold;z-index:2001;" onclick="closePhotoModal()">&times;</span>
       <img style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);max-width:90%;max-height:90%;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);" id="modalImage">
     </div>
    
-    <!-- 6. MODAL DETALLES (CON 4 TARJETAS) -->
+    <!-- 7. MODAL DETALLES (CON 4 TARJETAS) -->
     <div id="detalleModal" style="display:none;position:fixed;z-index:2000;left:0;top:0;width:100%;height:100%;background-color:rgba(0,0,0,0.5);overflow-y:auto;">
       <div style="background-color:#fff;margin:2% auto;padding:0;border-radius:16px;width:90%;max-width:900px;box-shadow:0 10px 40px rgba(0,0,0,0.2);overflow:hidden;">
         <div style="background:linear-gradient(135deg,var(--primary),#0a58ca);color:white;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;">
@@ -654,7 +657,7 @@
 <!-- ======================================================================
  * 🧠 LÓGICA JAVASCRIPT (Frontend + Aprobación + Stats)
  ====================================================================== -->
-  <script>
+<script>
     let registrosData = [];
     let paginaActual = 1;
     const registrosPorPagina = 8; 
@@ -770,7 +773,7 @@
     }
 
     // -------------------------------------------------------------------
-    // 4. RENDERIZADO DE TABLA
+    // 4. RENDERIZADO DE TABLA (Con Lógica de Aprobación)
     // -------------------------------------------------------------------
     function mostrarRegistros() {
       const tbody = document.getElementById('cuerpoTabla');
@@ -804,12 +807,14 @@
         let estadoBadge = '';
         let accionesHtml = '';
 
+        // Verificar si tiene salida (Incompleto vs Completo)
         const tieneSalida = r.fechaSalida && r.horaSalida;
 
         if (!tieneSalida) {
           estadoBadge = '<span class="badge-status badge-incompleto">Incompleto</span>';
           accionesHtml = '<button class="btn btn-sm btn-outline-secondary" disabled><i class="bi bi-lock"></i></button>';
         } else {
+          // Tiene salida, evaluamos el estado de HE
           const estado = r.estadoHE || ''; 
 
           if (estado === 'Pendiente Supervisor') {
@@ -822,11 +827,13 @@
             estadoBadge = '<span class="badge-status badge-aprobado">Aprobado</span>';
             accionesHtml = `<span style="color:#198754; font-weight:bold;"><i class="bi bi-check-circle"></i> Aprobado</span>`;
           } else {
+            // Estado vacío o desconocido, asumo pendiente supervisor
             estadoBadge = '<span class="badge-status badge-pendiente-super">Pendiente Supervisor</span>';
             accionesHtml = `<button class="btn-aprobar btn-aprobar-sup" onclick="aprobarRegistro(${r.fila}, 'supervisor')"><i class="bi bi-check-circle-fill"></i> Aprobar (Sup)</button>`;
           }
         }
 
+        // Botón Ver Detalle (Independiente de aprobación)
         const btnDetalle = `<button class="btn-ver-detalle" onclick="mostrarDetalle(${idxGlobal})"><i class="bi bi-eye-fill"></i></button>`;
 
         const row = `
@@ -856,10 +863,9 @@
     }
 
     // -------------------------------------------------------------------
-    // 5. FUNCIÓN DE APROBACIÓN (Solo envía datos)
-    // -------------------------------------------------------------------        
+    // 5. FUNCIÓN DE APROBACIÓN (Backend decide el Rol)
+    // -------------------------------------------------------------------
     function aprobarRegistro(fila) {
-      // Nota: Ya NO enviamos el rol ('supervisor' o 'director').
       // El backend `aprobarHorasExtras` detecta tu rol por tu correo automáticamente.
       
       Swal.fire({
@@ -887,7 +893,6 @@
             });
           } else {
             // Si es error de permisos, el backend devuelve el mensaje específico
-            // Ej: "Solo el Director Nacional puede dar la aprobación final."
             Swal.fire({
               icon: 'error',
               title: 'Permiso Denegado',
@@ -946,7 +951,7 @@
     }
 
     // -------------------------------------------------------------------
-    // 7. MODAL DE DETALLES
+    // 7. MODAL DE DETALLES (4 CARDS)
     // -------------------------------------------------------------------
     function mostrarDetalle(idx) {
       const r = registrosData[idx];
@@ -1019,17 +1024,13 @@
       }
 
       // --- LOG DE APROBACIÓN ---
-      const aprobSuper = r.aprobadoSuper || '-';
-      const aprobDir = r.aprobadoDirector || '-';
-      const fechaSuper = r.fechaApruebaSuper || '';
-      const fechaDir = r.fechaApruebaDirector || '';
+      document.getElementById('logAprobadoSuper').textContent = r.aprobadoSuper || '-';
+      document.getElementById('logFechaSuper').textContent = r.fechaApruebaSuper || '';
 
-      document.getElementById('logAprobadoSuper').textContent = aprobSuper;
-      document.getElementById('logFechaSuper').textContent = fechaSuper;
+      document.getElementById('logAprobadoDir').textContent = r.aprobadoDirector || '-';
+      document.getElementById('logFechaDir').textContent = r.fechaApruebaDirector || '';
 
-      document.getElementById('logAprobadoDir').textContent = aprobDir;
-      document.getElementById('logFechaDir').textContent = fechaDir;
-
+      // Mostrar Modal
       document.getElementById('detalleModal').style.display = 'block';
     }
 
