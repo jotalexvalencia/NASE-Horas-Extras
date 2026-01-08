@@ -1,31 +1,39 @@
 // =================================================================
 // 📁 geocodificador.gs – Módulo de Geocodificación (NASE 2026 - Horas Extras)
-// =================================================================
+// ----------------------------------------------------------------------
 /**
- * @summary Módulo inteligente para geocodificación y control de asistencia por ubicación.
- * @description Administra la conversión de coordenadas GPS (Lat/Lng) a direcciones y ciudades.
- *              Calcula distancias (Haversine) entre el empleado y su centro asignado.
- *              **ACTUALIZACIÓN:** Índices ajustados al esquema de "Horas Extras" (Code.gs).
- * 
+ * @summary Módulo inteligente para geocodificación y control de asistencia.
+ * @description Administra la conversión de coordenadas GPS (Lat/Lng) a direcciones.
+ *              Calcula distancias (Haversine) contra el libro de Centros EXTERNO.
+ *              Ajuste de índices a la estructura original solicitada por el usuario.
+ *
+ * @features
+ *   - 🌍 Geocodificación inversa (APIs OpenCage, Maps.co, Nominatim).
+ *   - 📏 Cálculo de distancia al centro asignado.
+ *   - 🚦 Semáforo "Dentro/Fuera" del centro.
+ *   - 📂 Lectura de "Centros" desde el Libro Base Operativa.
+ *
  * @author NASE Team
- * @version 2.1 (Ajuste de Columnas Horas Extras)
+ * @version 2.2 (Lectura Externa + Índices Originales)
  */
 
 // =================================================================
 // 1. CONFIGURACIÓN DEL SISTEMA
 // =================================================================
 
-// Objeto global GEO que encapsula configuración y funciones (Namespace Pattern)
+// Objeto global GEO que encapsula configuración y funciones
 if (typeof GEO === 'undefined') var GEO = {};
 
+// ID DEL LIBRO Nase Control de Entradas y Salidas (Donde está la hoja "Centros")
+const ID_LIBRO_BASE = "1PchIxXq617RRL556vHui4ImG7ms2irxiY3fPLIoqcQc"; 
+
 GEO.CONFIG = {
-  SHEET_RESPUESTAS: "Respuestas", // Nombre de la hoja principal
-  SHEET_CENTROS: "Centros",      // Nombre de la hoja de referencia de centros
+  SHEET_RESPUESTAS: "Respuestas", // Nombre de la hoja principal (Libro actual)
+  SHEET_CENTROS: "Centros",      // Nombre de la hoja de referencia (Libro Externo)
   
-  // ✅ MAPEO DE COLUMNAS ACTUALIZADO (Basado en RESP_HEADERS de Code.gs)
-  // Indices 0-based basados en:
+  // ✅ MAPEO DE COLUMNAS (Basado en estructura original solicitada por usuario)
+  // Indices 0-based correspondientes a:
   // 0:Ced, 1:Centro, 2:Ciudad, 3:Lat, 4:Lng, 5:Acepto, 6:Ciudad_Geo, 7:Dir_Geo, 8:Accuracy, 9:Dentro, 10:Distancia...
-  
   R_COL_LAT: 3,            // Columna D: Latitud GPS (Índice 3)
   R_COL_LNG: 4,            // Columna E: Longitud GPS (Índice 4)
   R_COL_CIUDAD_GEO: 6,    // Columna G: Ciudad Geocodificada (Índice 6)
@@ -48,8 +56,8 @@ GEO.CONFIG = {
  * @description Esta función debe ejecutarse UNA SOLA VEZ manualmente desde el editor.
  */
 function guardarApiKeyOpenCage() {
-  // ⚠️ ATENCIÓN: Reemplaza 'TU_CLAVE_API_DE_OPENCAGE' con la clave real
-  const apiKey = '0f4d42a072704ffc8ad51d03a21fcea0';
+  // ⚠️ ATENCIÓN: Reemplaza '0f4d...' con tu clave real si aún no la has guardado en Properties
+  const apiKey = '0f4d42a072704ffc8ad51d03a21fcea0'; 
   PropertiesService.getScriptProperties().setProperty(GEO.CONFIG.OPENCAGE_API_PROP, apiKey);
   Logger.log('✅ API Key de OpenCage guardada de forma segura.');
   SpreadsheetApp.getUi().alert('✅ API Key de OpenCage guardada correctamente. Ya puedes borrar esta función si lo deseas.');
@@ -72,20 +80,23 @@ GEO.normalizarCoord = function(v) {
 
 /**
  * @summary Determina la ciudad basándose en reglas de negocio y coordenadas.
+ * @description Correcciones lógicas para ciudades ambiguas.
  */
 GEO.normalizarCiudadLocal = function(ciudad, lat, lng) {
   if (!ciudad) return "No encontrado";
   const l = ciudad.toString().toLowerCase();
   
-  if (l.includes("risaralda") || l.includes("eje") || l.includes("amco") || l.includes("perimetro urbano pereira") || l.includes("perímetro urbano pereira")) {
+  // Reglas específicas para ciudades con varios nombres
+  if (l.includes("risaralda") || l.includes("eje") || l.includes("amco") || l.includes("perimetro urbano pereira") || l.includes("perimetro urbano pereira")) {
     return lat >= 4.825 ? "Dosquebradas" : "Pereira";
   }
-  if (l.includes("valle") || l.includes("pac") || l.includes("perímetro urbano santiago de cali") || l.includes("cali")) return "Cali";
+  if (l.includes("valle") || l.includes("pac") || l.includes("perimetro urbano santiago de cali") || l.includes("cali")) return "Cali";
   if (l.includes("cartago")) return "Cartago";
   if (l.includes("bogot") || l.includes("cundinamarca")) return "Bogotá";
-  if (l.includes("medellín") || l.includes("perímetro urbano medellín")) return "Medellín";
+  if (l.includes("medellín") || l.includes("perimetro urbano medellín")) return "Medellín";
   
-  return ciudad.replace(/^(Per[íi]metro urbano|AMCO|Area Metropolitana Centro Occidente|.*,\s*)+/gi, '').split(',')[0].trim() || "No encontrado";
+  // Elimina prefijos comunes si no hay regla específica
+  return ciudad.replace(/^(Per[íi]metro Urbano|AMCO|Area Metropolitana Centro Occidente|.*,\s*)+/gi, '').split(',')[0].trim() || "No encontrado";
 };
 
 /**
@@ -104,20 +115,23 @@ GEO.calcularDistancia = function(lat1, lon1, lat2, lon2) {
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a =
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
 
 /**
  * @summary Busca dinámicamente el índice de una columna por nombre.
+ * @description Fallback robusto para encontrar índices aunque el orden varíe ligeramente.
  */
 GEO.findHeaderIndex = function(headers, names) {
-  for (let name of names) {
-    const index = headers.findIndex(h => h && h.toString().toLowerCase().trim() === name.toLowerCase().trim());
-    if (index !== -1) return index + 1; // Devuelve el número de columna (1-based)
+  if (!headers || !headers.length) return -1;
+  const lower = headers.map(h => (h || "").toString().trim().toLowerCase());
+  for (const cand of names) {
+    const idx = lower.indexOf(cand.toString().trim().toLowerCase());
+    if (idx !== -1) return idx + 1;
   }
   return -1;
 };
@@ -160,7 +174,7 @@ GEO.getFromMapsCo = (lat, lng) => {
 
 GEO.getFromNominatim = (lat, lng) => {
   const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&addressdetails=1&accept-language=es`;
-  const r = UrlFetchApp.fetch(url, { headers: { 'User-Agent': 'NASE-Geocoder/1.0 (contact: analistaoperaciones@nasecolombia.com.co)' } });
+  const r = UrlFetchApp.fetch(url, { headers: { 'User-Agent': 'NASE-Geocoder/1.0 (contact: soporte@nasecolombia.com.co)' } });
   return JSON.parse(r.getContentText());
 };
 
@@ -179,7 +193,7 @@ GEO.getFromOpenCage = (lat, lng) => {
   if (response.getResponseCode() === 200 && json.results && json.results.length > 0) {
     const result = json.results[0];
     const components = result.components;
-    const ciudad = GEO.normalizarCiudadLocal(components.city || components.town || components.county || '', lat, lng);
+    const ciudad = GEO.normalizarCiudadLocal(components.city || components.town || '', lat, lng);
     const direccion = GEO.limpiarDireccion(result.formatted);
     return { ciudad: ciudad, direccion: direccion, fuente: 'OpenCage' };
   }
@@ -194,6 +208,7 @@ GEO.reverseGeocodeInternal = function(lat, lng) {
   let result = null;
   let source = '';
 
+  // 1. Intentar Maps.co (Rápido y fiable)
   try {
     const j = GEO.getFromMapsCo(lat, lng);
     if (j && j.display_name) {
@@ -205,6 +220,7 @@ GEO.reverseGeocodeInternal = function(lat, lng) {
     }
   } catch (e) { Logger.log(e); }
 
+  // 2. Si falla, intentar Nominatim (OpenStreetMap)
   if (!result) {
     try {
       const j = GEO.getFromNominatim(lat, lng);
@@ -219,6 +235,7 @@ GEO.reverseGeocodeInternal = function(lat, lng) {
     } catch (e) { Logger.log(e); }
   }
  
+  // 3. Si fallan, intentar OpenCage (último recurso)
   if (!result) {
     const openCageResult = GEO.getFromOpenCage(lat, lng);
     if (openCageResult && !openCageResult.error) {
@@ -250,7 +267,8 @@ GEO.reverseGeocodeInternal = function(lat, lng) {
 
 /**
  * @summary Función principal que se ejecuta desde el Menú.
- * @description Corrige los índices de escritura para coincidir con la hoja Horas Extras.
+ * @description Lee la fila seleccionada, conecta al libro EXTERNO de centros,
+ *              calcula la distancia y escribe los datos en el libro actual.
  */
 function geocodificarFilaActiva() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -261,95 +279,138 @@ function geocodificarFilaActiva() {
     return;
   }
 
-  // ----------------------------------------------------------------
-  // 1. OBTENER DATOS DE LA FILA ACTIVA
-  // ----------------------------------------------------------------
+  // ----------------------------------------------------------------------
+  // 1. OBTENER DATOS DE LA FILA ACTIVA (Libro Actual)
+  // ----------------------------------------------------------------------
   const fila = hojaRes.getActiveCell().getRow();
   
-  if (fila === 1) { 
-    SpreadsheetApp.getUi().alert("Selecciona una fila con datos, no el encabezado."); 
+  if (!fila || fila < 2) { 
+    SpreadsheetApp.getUi().alert("Selecciona una fila válida en la hoja Respuestas."); 
     return; 
   }
 
-  const headers = hojaRes.getRange(1, 1, 1, hojaRes.getLastColumn()).getValues()[0];
+  const headers = hojaRes.getRange(1, 1, 1, hojaRes.getLastColumn()).getValues()[0] || [];
   const getCol = (name) => GEO.findHeaderIndex(headers, [name]);
 
-  // Usamos los índices corregidos para leer
-  const lat = GEO.normalizarCoord(hojaRes.getRange(fila, GEO.CONFIG.R_COL_LAT + 1).getValue());
-  const lng = GEO.normalizarCoord(hojaRes.getRange(fila, GEO.CONFIG.R_COL_LNG + 1).getValue());
-  const nombreCentro = (hojaRes.getRange(fila, getCol("centro")).getValue() || "").toString().trim();
-  const ciudadCentro = (hojaRes.getRange(fila, getCol("ciudad")).getValue() || "").toString().trim();
+  const filaVals = hojaRes.getRange(fila, 1, 1, hojaRes.getLastColumn()).getValues()[0];  
+  const centro = (filaVals[getCol("centro") - 1] || "").toString().trim();
+  const ciudadCentro = (filaVals[getCol("ciudad") - 1] || "").toString().trim();
+  
+  // Normalizar coordenadas (Manejo de comas separador de miles o decimales)
+  const latEmp = GEO.normalizarCoord(filaVals[getCol("lat") - 1]); 
+  const lngEmp = GEO.normalizarCoord(filaVals[getCol("lng") - 1]); 
+  const direccion = (filaVals[getCol("direccion") - 1] || "").toString();
 
-  if (lat == null || lng == null || !nombreCentro) {
-    SpreadsheetApp.getUi().alert("Faltan datos clave en la fila: Latitud, Longitud o Centro.");
+  // Validar datos mínimos
+  if (isNaN(latEmp) || isNaN(lngEmp)) {
+    SpreadsheetApp.getUi().alert("⚠️ Coordenadas inválidas o vacías en la fila seleccionada.");
+    return;
+  }
+  if (!centro) {
+    SpreadsheetApp.getUi().alert("⚠️ La fila seleccionada no tiene un Centro asignado en la columna 'Centro'.");
     return;
   }
 
-  // ----------------------------------------------------------------
-  // 2. BUSCAR EL CENTRO EN LA HOJA 'Centros'
-  // ----------------------------------------------------------------
-  const hojaCentros = ss.getSheetByName(GEO.CONFIG.SHEET_CENTROS);
-  if (!hojaCentros) { SpreadsheetApp.getUi().alert("La hoja 'Centros' no existe."); return; } 
+  // ----------------------------------------------------------------------
+  // 2. BUSCAR INFORMACIÓN DEL CENTRO EN EL LIBRO EXTERNO
+  // ----------------------------------------------------------------------
   
-  const dataCentros = hojaCentros.getDataRange().getValues();
-  const headersCentros = dataCentros[0];
-  const getColC = (name) => GEO.findHeaderIndex(headersCentros, [name]);
-
-  let centroRef = null;
+  let latCentro = null, lngCentro = null, radio = 30, urlImagenCentro = "";
   
-  for (let i = 1; i < dataCentros.length; i++) {
-    const rowC = dataCentros[i];
-    const nombreC = (rowC[getColC("centro") - 1] || "").toString().trim();
-    const ciudadC = (rowC[getColC("ciudad") - 1] || "").toString().trim();
-   
-    if (nombreC.toUpperCase() === nombreCentro.toUpperCase() && ciudadC.toUpperCase() === ciudadCentro.toUpperCase()) {
-      centroRef = {
-        lat: GEO.normalizarCoord(rowC[getColC("lat") - 1]), // Asumiendo header "Lat" en centros
-        lng: GEO.normalizarCoord(rowC[getColC("lng") - 1]), // Asumiendo header "Lng" en centros
-        radio: Number(rowC[getColC("radio") - 1]) || 30,
-        nombre: nombreC,
-        ciudad: ciudadC
-      };
-      break;
+  try {
+    // ABRIR LIBRO EXTERNO (Base Operativa)
+    const ssExt = SpreadsheetApp.openById(ID_LIBRO_BASE);
+    
+    // Buscar hoja "Centros" en el libro externo
+    let hojaCentros = ssExt.getSheetByName("Centros");
+    if (!hojaCentros) {
+       // Intento secundario por si el nombre difiere
+       hojaCentros = ssExt.getSheetByName("BASE_CENTROS");
     }
-  }
 
-  if (!centroRef) {
-    SpreadsheetApp.getUi().alert(`No se encontró el centro "${nombreCentro}" en la ciudad "${ciudadCentro}" en la hoja 'Centros'.`);
+    if (!hojaCentros) {
+      SpreadsheetApp.getUi().alert("⚠️ No se encontró la hoja 'Centros' ni 'BASE_CENTROS' en el Libro Base Operativa.");
+      return;
+    }
+
+    const dataCentros = hojaCentros.getDataRange().getValues();
+    if (!dataCentros || dataCentros.length < 2) return;
+
+    const headersCentros = dataCentros[0];
+  
+    // Función auxiliar para buscar en la hoja Centros
+    const getColC = (name) => GEO.findHeaderIndex(headersCentros, [name]);
+
+    // Iterar para encontrar el centro que coincida (Nombre + Ciudad)
+    for (let i = 1; i < dataCentros.length; i++) {
+      const rowC = dataCentros[i];
+      const nombreC = (rowC[getColC("centro") - 1] || "").toString().trim();
+      const ciudadC = (rowC[getColC("ciudad") - 1] || "").toString().trim();
+     
+      // Coincidencia insensible a mayúsculas
+      if (nombreC.toUpperCase() === centro.toUpperCase() && ciudadC.toUpperCase() === ciudadCentro.toUpperCase()) {
+        // Leer coordenadas del centro externo
+        latCentro = GEO.normalizarCoord(rowC[getColC("lat ref") - 1]);
+        lngCentro = GEO.normalizarCoord(rowC[getColC("lng ref") - 1]);
+        radio = rowC[getColC("radio") - 1] ? Number(rowC[getColC("radio") - 1]) : 30;
+        
+        // Leer dirección e imagen si existen en el libro externo
+        const idxDir = getColC("direccion");
+        const idxImg = getColC("link_imagen");
+        
+        direccion = (idxDir > -1) ? (rowC[idxDir - 1] || "").toString() : "";
+        
+        if (idxImg > -1) {
+           urlImagenCentro = (rowC[idxImg - 1] || "").toString().trim();
+        }
+        
+        break;
+      }
+    }
+  } catch (errExt) {
+    SpreadsheetApp.getUi().alert("❌ Error leyendo datos externos del Centro: " + errExt.toString());
     return;
   }
 
-  const distancia = GEO.calcularDistancia(lat, lng, centroRef.lat, centroRef.lng);
-  const estaDentro = distancia <= centroRef.radio;
+  // Validar que se encontró el centro de referencia
+  if (isNaN(latCentro) || isNaN(lngCentro)) {
+    SpreadsheetApp.getUi().alert(`⚠️ No se encontró el centro "${centro}" en la ciudad "${ciudadCentro}" en el Libro Base.`);
+    return;
+  }
 
-  // ----------------------------------------------------------------
-  // 3. ESCRIBIR RESULTADOS EN LA HOJA (Usando indices corregidos)
-  // ----------------------------------------------------------------
-  // Recordar: GEO.CONFIG tiene indices 0-based, getRange usa 1-based. Sumamos 1.
+  // ----------------------------------------------------------------------
+  // 3. CÁLCULO DE DISTANCIA Y ESTADO (Dentro/Fuera)
+  // ----------------------------------------------------------------------
+  const distancia = GEO.calcularDistancia(latCentro, lngCentro, latEmp, lngEmp); 
+  const dentro = distancia <= radio;
+
+  // ----------------------------------------------------------------------
+  // 4. OBTENER GEOCODIFICACIÓN DE LA UBICACIÓN DEL EMPLEADO
+  // ----------------------------------------------------------------------
+  const resultadoGeo = GEO.reverseGeocodeInternal(latEmp, lngEmp);
+
+  // ----------------------------------------------------------------------
+  // 5. ESCRIBIR RESULTADOS EN LA HOJA "RESPUESTAS" (Libro Actual)
+  // ----------------------------------------------------------------------
+  
+  // Preparar rangos para escritura rápida
   const rangoCiudad = hojaRes.getRange(fila, GEO.CONFIG.R_COL_CIUDAD_GEO + 1);
   const rangoDir = hojaRes.getRange(fila, GEO.CONFIG.R_COL_DIR_GEO + 1);
   const rangoDentro = hojaRes.getRange(fila, GEO.CONFIG.R_COL_DENTRO_CENTRO + 1);
   const rangoDistancia = hojaRes.getRange(fila, GEO.CONFIG.R_COL_DISTANCIA + 1);
+  const rangoAccuracy = hojaRes.getRange(fila, GEO.CONFIG.R_COL_ACCURACY + 1);
 
-  if (estaDentro) {
-    rangoCiudad.setValue(centroRef.ciudad);
-    rangoDir.setValue(centroRef.nombre);
-    rangoDentro.setValue("Sí");
-    rangoDistancia.setValue(Number(distancia.toFixed(2)));
-    
-    SpreadsheetApp.getUi().alert(`✅ La ubicación está DENTRO del centro "${centroRef.nombre}".\nNo se consumieron cuotas de geocodificación.`);
+  rangoCiudad.setValue(resultadoGeo.ciudad);
+  rangoDir.setValue(resultadoGeo.direccion);
+  rangoAccuracy.setValue(resultadoGeo.fuente); // Guardar fuente de la geocodificación
+
+  rangoDentro.setValue(dentro ? "Sí" : "No");
+  rangoDistancia.setValue(Number(distancia.toFixed(2)));
+
+  // Alerta final
+  if (dentro) {
+    SpreadsheetApp.getUi().alert(`✅ La ubicación está DENTRO del centro "${centro}".\n\n🏢 Ciudad: ${resultadoGeo.ciudad}\n📍 Dirección: ${resultadoGeo.direccion}\n📏 Distancia: ${distancia.toFixed(2)}m`);
   } else {
-    rangoDentro.setValue("No");
-    rangoDistancia.setValue(Number(distancia.toFixed(2)));
-    
-    SpreadsheetApp.getUi().alert('📍 La ubicación está FUERA del centro. Geocodificando con APIs externas... Por favor, espere.');
-    
-    const resultado = GEO.reverseGeocodeInternal(lat, lng);
-   
-    rangoCiudad.setValue(resultado.ciudad);
-    rangoDir.setValue(resultado.direccion);
-    hojaRes.getRange(fila, GEO.CONFIG.R_COL_ACCURACY + 1).setValue(resultado.fuente);
-   
-    SpreadsheetApp.getUi().alert(`✔ Geocodificación completada.\n\nCiudad: ${resultado.ciudad}\nDirección: ${resultado.direccion}\nFuente: ${resultado.fuente}`);
+    SpreadsheetApp.getUi().alert(`📍 La ubicación está FUERA del centro "${centro}".\n\n🏢 Ciudad: ${resultadoGeo.ciudad}\n📍 Dirección: ${resultadoGeo.direccion}\n📏 Distancia: ${distancia.toFixed(2)}m\n\nSe ha registrado la geocodificación.`);
   }
 }
