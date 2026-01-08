@@ -573,60 +573,62 @@ function buscarEmpleadoPorCedulaEnLibro(cedula) {
  * @returns {Object} Estructura JSON para el formulario.
  */
 function getCentrosData() {
-  // ID del libro MAESTRO donde se gestionan los Centros (Base Operativa)
-  const ID_LIBRO_CENTROS = "1PchIxXq617RRL556vHui4ImG7ms2irxiY3fPLIoqcQc";
+  // ID del libro Base Operativa (Donde están los datos crudos)
+  const ID_LIBRO_CENTROS = "1PchIxXq617RRL556vHui4ImG7ms2irxiY3fPLIoqcQc"; 
   
   try {
-    // 1. Abrir el libro EXTERNO (Conexión Remota)
+    // 1. Abrir Libro Externo
     const ssExterno = SpreadsheetApp.openById(ID_LIBRO_CENTROS);
     
-    // 2. Buscar la hoja "Centros" en ese libro
-    const hojaCentros = ssExterno.getSheetByName("Centros");
+    // 2. Buscar la hoja. Probamos con "BASE_CENTROS" primero, luego "Centros"
+    let hojaCentros = ssExterno.getSheetByName("BASE_CENTROS");
+    if (!hojaCentros) hojaCentros = ssExterno.getSheetByName("Centros");
     
     if (!hojaCentros) {
-      Logger.log("⚠️ No se encontró la hoja 'Centros' en el libro externo: " + ID_LIBRO_CENTROS);
-      return { structured: [], data: [] }; // Retorno vacío seguro
-    }
-
-    // 3. Leer datos (Toda la hoja)
-    const data = hojaCentros.getDataRange().getValues();
-    
-    if (!data || data.length < 2) {
+      Logger.log("⚠️ No se encontró ni la hoja 'BASE_CENTROS' ni 'Centros' en el libro externo.");
       return { structured: [], data: [] };
     }
 
-    // 4. Normalizar Datos (Estructura para el Formulario HTML)
-    // El formulario espera: structured: [ { ciudad: '...', centro: '...' } ]
-    const headers = data[0];
+    // 3. Leer Datos
+    const data = hojaCentros.getDataRange().getValues();
+    if (!data || data.length < 2) return { structured: [], data: [] };
+
+    const headers = data[0].map(h => String(h).toUpperCase().trim()); // Poner todo en mayúsculas para comparar fácil
     const rows = data.slice(1);
-    
-    // Mapear índices (Búsqueda segura)
-    const idxCiudad = headers.findIndex(h => h.toString().toUpperCase().includes('CIUDAD'));
-    const idxCentro = headers.findIndex(h => h.toString().toUpperCase().includes('CENTRO') || h.toString().toUpperCase().includes('SEDE'));
-    
-    // Generar array estructurado
+
+    // 4. Mapear Índices (Buscamos exactamente "CIUDAD" y "CENTRO")
+    const idxCiudad = headers.indexOf("CIUDAD");
+    const idxCentro = headers.indexOf("CENTRO");
+
+    if (idxCiudad === -1 || idxCentro === -1) {
+      Logger.log("❌ Error crítico: No se encontraron columnas 'Ciudad' o 'Centro' en el libro externo.");
+      Logger.log("Encabezados encontrados: " + headers.join(" | "));
+      return { structured: [], data: [] };
+    }
+
+    // 5. Generar Array Estructurado para el Formulario
+    // El formulario espera: structured: [ { ciudad: '...', centro: '...' } ]
     const structuredData = [];
     
     for (let i = 0; i < rows.length; i++) {
-      const ciudad = rows[i][idxCiudad] ? rows[i][idxCiudad].toString().trim() : "";
-      const centro = rows[i][idxCentro] ? rows[i][idxCentro].toString().trim() : "";
+      const ciudad = rows[i][idxCiudad] ? String(rows[i][idxCiudad]).trim() : "";
+      const centro = rows[i][idxCentro] ? String(rows[i][idxCentro]).trim() : "";
       
+      // Solo agregamos si ambos tienen datos
       if (ciudad && centro) {
-        structuredData.push({
-          ciudad: ciudad,
-          centro: centro
+        structuredData.push({ 
+          ciudad: ciudad, 
+          centro: centro 
         });
       }
     }
 
-    // 5. Retornar datos al Frontend
-    return {
-      structured: structuredData, // Para el Select del Formulario
-      data: data                // Para otras lógicas si es necesario
-    };
+    // 6. Retornar Datos
+    Logger.log(`✅ Centros cargados desde Externo: ${structuredData.length} registros encontrados.`);
+    return { structured: structuredData, data: data };
 
   } catch (e) {
-    Logger.log("❌ Error leyendo centros del libro externo: " + e.toString());
+    Logger.log("❌ Error en getCentrosData: " + e.toString());
     // Si falla la lectura externa, devolvemos vacío para no romper el formulario
     return { structured: [], data: [] };
   }
