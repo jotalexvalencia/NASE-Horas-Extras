@@ -16,7 +16,7 @@
  *   - 🧭 Línea: Conexión visual entre el centro y el empleado.
  *
  * @author NASE Team
- * @version 1.2 (Versión Horas Extras)
+ * @version 1.3 (Corrección Visual - DOMContentLoaded)
  */
 
 // ======================================================================
@@ -24,18 +24,14 @@
 // ======================================================================
 
 /**
- * @summary Genera y muestra el mapa comparativo en una ventana modal.
- * @description Lee la fila seleccionada, busca el centro correspondiente,
- *              calcula la distancia y construye el código HTML para Leaflet.
- * 
- * @requires Hoja 'Centros' con columnas: Centro, Ciudad, Lat Ref, Lng Ref, Radio, Link Imagen.
+ * @summary Genera y muestra el mapa comparativo.
  */
 function mostrarMapaComparativo() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const hojaResp = ss.getActiveSheet();
-  const fila = hojaResp.getCurrentCell().getRow();
+  const fila = hojaResp.getActiveCell().getRow();
 
-  // Validar contexto: Seleccionar una fila con datos (no fila 1)
+  // Validar contexto
   if (!fila || fila < 2) {
     SpreadsheetApp.getUi().alert("Selecciona una fila válida en la hoja Respuestas antes de usar 'Ver mapa comparativo'.");
     return;
@@ -44,9 +40,7 @@ function mostrarMapaComparativo() {
   // ================================================================
   // 1️⃣ OBTENER DATOS DEL EMPLEADO (Fila Activa)
   // ================================================================
-  const headersResp = hojaResp.getRange(1, 1, 1, hojaResp.getLastColumn()).getValues()[0] || [];
-  
-  // Función auxiliar local para encontrar índices de columnas
+  const headersResp = hojaResp.getRange(1, 1, 1, hojaResp.getLastColumn()).getValues()[0] || [];  
   const findIdx = (hdrs, candidates) => {
     const low = hdrs.map(h => (h || "").toString().trim().toLowerCase());
     for (const cand of candidates) {
@@ -56,7 +50,6 @@ function mostrarMapaComparativo() {
     return -1;
   };
 
-  // Leer datos de la fila
   const idxCentro = findIdx(headersResp, ["centro", "centros", "centro de trabajo"]);
   const idxCiudadCentro = findIdx(headersResp, ["ciudad", "city"]);
   const idxLat = findIdx(headersResp, ["lat", "latitude", "latitud"]);
@@ -67,13 +60,15 @@ function mostrarMapaComparativo() {
   
   const centro = (filaVals[idxCentro - 1] || "").toString().trim();
   const ciudadCentro = (filaVals[idxCiudadCentro - 1] || "").toString().trim();
-  const latEmp = _parseCoord(filaVals[idxLat - 1]); // Helper global
-  const lngEmp = _parseCoord(filaVals[idxLng - 1]); // Helper global
+  
+  // Parsear coordenadas (Función auxiliar abajo)
+  const latEmp = _parseCoord(filaVals[idxLat - 1]); 
+  const lngEmp = _parseCoord(filaVals[idxLng - 1]); 
   const direccion = (filaVals[idxDir - 1] || "").toString();
 
-  // Validar datos mínimos (Coordenadas y Centro)
+  // Validar que las coordenadas sean números válidos
   if (isNaN(latEmp) || isNaN(lngEmp)) {
-    SpreadsheetApp.getUi().alert("⚠️ Coordenadas inválidas en la fila seleccionada. Verifica Lat/Lng en la hoja Respuestas.");
+    SpreadsheetApp.getUi().alert("⚠️ Coordenadas inválidas o vacías en la fila seleccionada. Verifica Lat/Lng en la hoja Respuestas.");
     return;
   }
   if (!centro) {
@@ -85,45 +80,42 @@ function mostrarMapaComparativo() {
   // 2️⃣ BUSCAR INFORMACIÓN DEL CENTRO DE REFERENCIA (Hoja 'Centros')
   // ================================================================
   const hojaCentros = ss.getSheetByName("Centros");
-  if (!hojaCentros) { SpreadsheetApp.getUi().alert("⚠️ La hoja 'Centros' no existe."); return; } 
+  if (!hojaCentros) { SpreadsheetApp.getUi().alert("⚠️ La hoja 'Centros' no existe en este libro."); return; } 
   
   const dataCentros = hojaCentros.getDataRange().getValues();
   const headersCentros = dataCentros[0];
   
-  // Función auxiliar para buscar en la hoja Centros
   const getColC = (name) => _findHeaderIndex(headersCentros, [name]);
 
   let latCentro = null, lngCentro = null, radio = 30, urlImagenCentro = "", direccionCentro = "";
   
-  // Iterar para encontrar el centro que coincida con el del empleado (Nombre + Ciudad)
+  // Iterar para encontrar el centro
   for (let i = 1; i < dataCentros.length; i++) {
     const rowC = dataCentros[i];
     const nombreC = (rowC[getColC("centro") - 1] || "").toString().trim();
     const ciudadC = (rowC[getColC("ciudad") - 1] || "").toString().trim();
    
-    // Coincidencia insensible a mayúsculas
     if (nombreC.toUpperCase() === centro.toUpperCase() && ciudadC.toUpperCase() === ciudadCentro.toUpperCase()) {
       latCentro = _parseCoord(rowC[getColC("lat ref") - 1]);
       lngCentro = _parseCoord(rowC[getColC("lng ref") - 1]);
       radio = rowC[getColC("radio") - 1] ? Number(rowC[getColC("radio") - 1]) : 30;
-      direccionCentro = rowC[getColC("direccion") - 1] || rowC[getColC("barrio / dirección") - 1] || "";
+      direccionCentro = rowC[getColC("direccion") - 1] || "";
       urlImagenCentro = (getColC("link_imagen") >= 0 ? (rowC[getColC("link_imagen") - 1] || "").toString().trim() : "");
       break;
     }
   }
 
-  // Validar que se encontró el centro de referencia
   if (isNaN(latCentro) || isNaN(lngCentro))
-    return SpreadsheetApp.getUi().alert(`⚠️ Coordenadas del centro "${centro}" no válidas o faltantes en la hoja 'Centros'.`);
+    return SpreadsheetApp.getUi().alert(`⚠️ Coordenadas del centro "${centro}" no válidas en la hoja 'Centros'.`);
 
   // ================================================================
-  // 3️⃣ CÁLCULO DE DISTANCIA Y ESTADO (Dentro/Fuera)
+  // 3️⃣ CÁLCULO DE DISTANCIA Y ESTADO
   // ================================================================
-  const distancia = _distMetros(latCentro, lngCentro, latEmp, lngEmp); // Helper global
+  const distancia = _distMetros(latCentro, lngCentro, latEmp, lngEmp); 
   const dentro = distancia <= radio;
 
   // ================================================================
-  // 4️⃣ GENERAR HTML DEL MAPA (Leaflet.js)
+  // 4️⃣ GENERAR HTML DEL MAPA (Con DOMContentLoaded para evitar error)
   // ================================================================
   const leafletCSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
   const leafletJS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
@@ -137,7 +129,7 @@ function mostrarMapaComparativo() {
     <link rel="stylesheet" href="${leafletCSS}" />
     <style>
       body {margin:0;padding:10px;font-family:Arial,sans-serif}
-      #map {height:720px;width:100%;border-radius:8px}
+      #map {height:680px;width:100%;border-radius:8px}
       .popup-img {width:100%;max-width:300px;border-radius:5px;margin-top:5px}
       .legend {background:#fff;padding:6px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.12)}
     </style>
@@ -147,70 +139,84 @@ function mostrarMapaComparativo() {
     <div id="map"></div>
     <script src="${leafletJS}"></script>
     <script>
-      // Inicializar mapa: Centrado en el punto medio entre Centro y Empleado, Zoom 13
-      const map = L.map('map').setView([ ((${latCentro}+${latEmp})/2), ((${lngCentro}+${lngEmp})/2) ], 13);
-      
-      // Capa 1: Callejero (OpenStreetMap)
-      const calle = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
-      
-      // Capa 2: Satélite (Esri World Imagery)
-      const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'© Esri'});
-      
-      // Control de capas (Switcher)
-      L.control.layers({"🗺️ Callejero":calle,"🌍 Satélite":sat}).addTo(map);
+      // Esperar a que Leaflet cargue para evitar errores "L is not defined"
+      document.addEventListener('DOMContentLoaded', function() {
+        try {
+          const latC = ${latCentro};
+          const latE = ${latEmp};
+          const lngC = ${lngCentro};
+          const lngE = ${lngEmp};
+          const rd = ${radio};
 
-      // -------------------------------------------------------------
-      // MARCADOR DEL CENTRO DE TRABAJO
-      // -------------------------------------------------------------
-      const centroMarker = L.marker([${latCentro}, ${lngCentro}]).addTo(map);
-      
-      let htmlCentro = "<b>🏢 Centro de Trabajo</b><br>${centro}<br><b>Ciudad:</b> ${ciudadCentro}<br><b>Dirección:</b> ${direccionCentro}<br><b>Radio:</b> ${radio} m";
-      if ("${urlImagenCentro}") htmlCentro += "<br><img src='${urlImagenCentro}' class='popup-img'>";
-      
-      centroMarker.bindPopup(htmlCentro);
+          // Validación por seguridad dentro del HTML
+          if (isNaN(latC) || isNaN(latE) || isNaN(lngC) || isNaN(lngE)) {
+             document.getElementById('map').innerHTML = "⚠️ Coordenadas inválidas. Imposible mostrar mapa.";
+             return;
+          }
 
-      // -------------------------------------------------------------
-      // CÍRCULO DE RADIO (Visualización de Área Permitida)
-      // -------------------------------------------------------------
-      L.circle([${latCentro}, ${lngCentro}],{
-        color:'#2e7d32',fillColor:'#2e7d32',fillOpacity:0.12,
-        radius:Math.max(${radio},80)
-      }).addTo(map);
+          const map = L.map('map').setView([ ((latC + latE) / 2), ((lngC + lngE) / 2) ], 15);
+          
+          // Capa 1: Callejero
+          const calle = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
+          
+          // Capa 2: Satélite
+          const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'© Esri'});
+          
+          // Control de capas
+          L.control.layers({"🗺️ Callejero":calle,"🌍 Satélite":sat}).addTo(map);
 
-      // -------------------------------------------------------------
-      // MARCADOR DEL EMPLEADO
-      // -------------------------------------------------------------
-      const color = ${dentro} ? '#1976d2' : '#d32f2f';
-      
-      const icono = L.divIcon({
-        html: \`<svg height="36" width="36"><circle cx="18" cy="18" r="16" fill="\${color}" stroke="white" stroke-width="2"/></svg><image href="https://raw.githubusercontent.com/jotalexvalencia/NASE/main/nase_marcador.png" x="10" y="10" width="16" height="16"/></svg>\`,
-        iconSize:[36,36],iconAnchor:[18,36],popupAnchor:[0,-36]
+          // Marcador del Centro
+          const centroMarker = L.marker([latC, lngC]).addTo(map);
+          
+          let htmlCentro = "<b>🏢 Centro de Trabajo</b><br>${centro}<br><b>Ciudad:</b> ${ciudadCentro}<br><b>Dirección:</b> ${direccionCentro}<br><b>Radio:</b> ${rd} m";
+          const imgUrl = "${urlImagenCentro}";
+          if (imgUrl && imgUrl.length > 5) {
+             htmlCentro += "<br><img src='" + imgUrl + "' class='popup-img'>";
+          }
+
+          centroMarker.bindPopup(htmlCentro);
+
+          // Círculo del Radio
+          L.circle([latC, lngC],{
+            color:'#2e7d32',fillColor:'#2e7d32',fillOpacity:0.12,
+            radius:Math.max(rd, 80)
+          }).addTo(map);
+
+          // Marcador del Empleado
+          const color = ${dentro} ? '#2e7d32' : '#d32f2f';
+          
+          const icono = L.divIcon({
+            html:\`<svg height="36" width="36"><circle cx="18" cy="18" r="16" fill="\${color}" stroke="white" stroke-width="2"/></svg>\`,
+            iconSize:[36,36],iconAnchor:[18,36],popupAnchor:[0,-36]
+          });
+          
+          const emp = L.marker([latE, lngE], {icon:icono}).addTo(map);
+          const estado = ${dentro} ? '✅ DENTRO del radio' : '❌ FUERA del radio';
+          const dist = (${distancia}).toFixed(1);
+
+          emp.bindPopup("<b>📍 Registro Empleado</b><br>${centro}<br>${direccion}<br><b>Lat:</b> " + latE.toFixed(6) + "<br><b>Lng:</b> " + lngE.toFixed(6) + "<br><b>Estado:</b> " + estado + "<br><b>Distancia:</b> " + dist + " m");
+
+          // Línea de conexión
+          L.polyline([[latC, lngC],[latE, lngE]],{color:'gray',weight:2,dashArray:'6,6'}).addTo(map);
+
+          // Leyenda
+          const legend = L.control({position:'bottomleft'});
+          legend.onAdd = function (map) {
+            const div = L.DomUtil.create('div', 'legend');
+            div.innerHTML = "<b>📋 Leyenda</b><br>🏢 Centro<br>🔵 Radio: " + rd + " m<br>🔵/🔴 Registro(dentro/fuera)<br><b>Distancia:</b> " + dist + " m";
+            return div;
+          };
+          legend.addTo(map);
+
+        } catch (e) {
+          document.getElementById('map').innerHTML = "⚠️ Error al cargar el mapa: " + e.message;
+          console.error(e);
+        }
       });
-      
-      const emp = L.marker([${latEmp}, ${lngEmp}], {icon:icono}).addTo(map);
-      const estado = ${dentro} ? '✅ DENTRO del radio' : '❌ FUERA del radio';
-      emp.bindPopup("<b>📍 Registro Empleado</b><br>${centro}<br>${direccion}<br><b>Lat:</b> ${latEmp.toFixed(6)}<br><b>Lng:</b> ${lngEmp.toFixed(6)}<br><b>Estado:</b> "+estado+"<br><b>Distancia:</b> ${distancia.toFixed(1)} m");
-
-      // -------------------------------------------------------------
-      // LÍNEA DE CONEXIÓN (Centro -> Empleado)
-      // -------------------------------------------------------------
-      L.polyline([[${latCentro}, ${lngCentro}],[${latEmp}, ${lngEmp}]],{color:'gray',weight:2,dashArray:'6,6'}).addTo(map);
-
-      // -------------------------------------------------------------
-      // LEYENDA PERSONALIZADA
-      // -------------------------------------------------------------
-      const legend = L.control({position:'bottomleft'});
-      legend.onAdd = function (map) {
-        const div = L.DomUtil.create('div', 'legend');
-        div.innerHTML = "<b>📋 Leyenda</b><br>🏢 Centro<br>🔘 Radio: ${radio} m<br>🔵/🔴 Registro(dentro)/Registro(fuera)<br><b>Distancia:</b> ${distancia.toFixed(1)} m";
-        return div;
-      };
-      legend.addTo(map);
     </script>
   </body>
   </html>`;
 
-  // TÍTULO ACTUALIZADO
   SpreadsheetApp.getUi().showModalDialog(
     HtmlService.createHtmlOutput(html).setWidth(920).setHeight(780),
     "📍 Mapa Comparativo (Control Horas Extras)"
@@ -218,7 +224,7 @@ function mostrarMapaComparativo() {
 }
 
 // ======================================================================
-// 2. UTILIDADES LOCALES / GLOBALES (Helpers)
+// 2. UTILIDADES LOCALES (Helpers)
 // ======================================================================
 
 function _findHeaderIndex(headers, names) {
@@ -234,18 +240,14 @@ function _findHeaderIndex(headers, names) {
 function _parseCoord(v) {
   if (v == null || typeof v === 'undefined') return NaN;
   let s = String(v).trim();
-  if (!s) return NaN;
-  
-  if (["[REVISAR]", "NO", "N/A"].includes(s.toUpperCase())) return NaN;
-  
+  if (!s) return NaN;  
+  if (["[REVISAR]", "NO", "N/A"].includes(s.toUpperCase())) return NaN;  
   s = s.replace(/\s+/g, "").replace(",", ".");
-  s = s.replace(/[^0-9.\-]/g, "");
-  
+  s = s.replace(/[^0-9.\-]/g, "");  
   let n = parseFloat(s);
-  if (isNaN(n)) return NaN;
-  
-  while (Math.abs(n) > 180) n /= 10;
-  
+  if (isNaN(n)) return NaN;  
+  // Corrección rápida para coordenadas en formato decimal si vienen como 4.7
+  if (Math.abs(n) > 180) n /= 10;
   return n;
 }
 
