@@ -214,16 +214,26 @@ function asegurarEncabezadosRespuestas_(sh) {
 // 3. LÓGICA DE APROBACIÓN (NUEVO MÓDULO)
 // ===================================================================
 
+// ===================================================================
+// 3. LÓGICA DE APROBACIÓN (DETECCIÓN AUTOMÁTICA DE ROL)
+// ===================================================================
+
 /**
- * @summary Aprueba un registro de Horas Extras (Supervisor o Director).
- * @description Valida permisos y actualiza las columnas de aprobación en la hoja.
- * @param {Number} rowIndex - Índice de la fila (1-based) en la hoja de cálculo.
- * @param {String} rol - 'supervisor' o 'director'.
- * @param {String} userEmail - Correo del usuario que intenta aprobar.
+ * @summary Aprueba un registro de Horas Extras (Backend decide el Rol).
+ * @description Determina el rol del usuario basado en su correo en las constantes.
+ *              Valida la secuencia de aprobación (Supervisor -> Director).
+ *
+ * @permissions
+ *   - Director Nacional: Puede aprobar registros en estado "Pendiente Supervisor" (pasa a Pendiente Dir)
+ *                          y registros en estado "Pendiente Director" (pasa a Aprobado).
+ *   - Supervisor: Solo puede aprobar registros en estado "Pendiente Supervisor".
+ *
+ * @param {Number} rowIndex - Índice de la fila (1-based).
  * @returns {Object} { status: 'ok'|'error', message: String }
  */
-function aprobarHorasExtras(rowIndex, rol, userEmail) {
-  const lock = LockService.getScriptLock();
+function aprobarHorasExtras(rowIndex) {
+  // 1. BLOQUEO Y CARGA
+  var lock = LockService.getScriptLock();
   try {
     if (!lock.tryLock(5000)) return { status: 'error', message: 'El sistema está ocupado. Intente de nuevo.' };
 
@@ -234,43 +244,78 @@ function aprobarHorasExtras(rowIndex, rol, userEmail) {
     const fila = Number(rowIndex);
     if (fila < 2) return { status: 'error', message: 'Fila inválida' };
 
-    // Leer estado actual
+    // 2. LEER ESTADO ACTUAL DEL REGISTRO
     const estadoActual = sh.getRange(fila, RESP_I.ESTADO + 1).getValue();
-    
-    // Validaciones de Seguridad
-    if (rol === 'supervisor') {
-      if (PERMISOS_CONSULTA.indexOf(userEmail) === -1 && PERMISOS_DIRECTOR.indexOf(userEmail) === -1) {
-        return { status: 'error', message: 'No tienes permiso de Supervisor.' };
-      }
-      // Solo puede aprobar si está Pendiente o está vacío
-      if (estadoActual && estadoActual !== 'Pendiente Supervisor' && estadoActual !== '') {
-         return { status: 'error', message: 'Este registro ya fue procesado.' };
-      }
-      
-      // Actualizar: Supervisor
-      sh.getRange(fila, RESP_I.ESTADO + 1).setValue('Pendiente Director');
-      sh.getRange(fila, RESP_I.APROB_SUPER + 1).setValue(userEmail);
-      sh.getRange(fila, RESP_I.FECHA_APROB_SUPER + 1).setValue(new Date());
+    const estadoNormalizado = String(estadoActual || '').trim().toLowerCase();
 
-    } else if (rol === 'director') {
-      if (PERMISOS_DIRECTOR.indexOf(userEmail) === -1) {
-        return { status: 'error', message: 'Acceso exclusivo para Director Nacional de Operaciones.' };
-      }
-      // Solo puede aprobar si el Supervisor ya lo hizo
-      if (estadoActual !== 'Pendiente Director') {
-        return { status: 'error', message: 'Debe estar aprobado por Supervisor primero.' };
-      }
+    // 3. DETERMINAR ROL DEL USUARIO AUTOMÁTICAMENTE
+    const emailUsuario = Session.getActiveUser().getEmail();
+    var rolUsuario = '';
 
-      // Actualizar: Director
-      sh.getRange(fila, RESP_I.ESTADO + 1).setValue('Aprobado');
-      sh.getRange(fila, RESP_I.APROB_DIR + 1).setValue(userEmail);
-      sh.getRange(fila, RESP_I.FECHA_APROB_DIR + 1).setValue(new Date());
+    // Prioridad: Si eres Director, tienes poder de Supervisor también.
+    if (PERMISOS_DIRECTOR.indexOf(emailUsuario) !== -1) {
+      rolUsuario = 'director';
+    } else if (PERMISOS_CONSULTA.indexOf(emailUsuario) !== -1) {
+      rolUsuario = 'supervisor';
+    } else {
+      return { status: 'error', message: 'Acceso Denegado: Tu correo no tiene permisos de aprobación.' };
     }
 
-    return { status: 'ok', message: 'Aprobación registrada exitosamente.' };
+    // --- LOGS DE DEPURACIÓN ---
+    Logger.log("============================================");
+    Logger.log("APROBACIÓN AUTOMÁTICA (Rol Detectado)");
+    Logger.log("Usuario: " + emailUsuario);
+    Logger.log("Rol Detectado: " + rolUsuario);
+    Logger.log("Estado Actual Fila " + fila + ": " + estadoActual);
+
+    // 4. VALIDACIÓN DE PERMISOS (Seguridad de Niveles)
+    if (rolUsuario === 'supervisor') {
+      // El Supervisor SOLO puede actuar si el estado es "Pendiente Supervisor".
+      // No puede mover de "Pendiente Director" a "Aprobado".
+      if (estadoNormalizado !== '' && 
+          estadoNormalizado !== 'pendiente supervisor') {
+             Logger.log("❌ NEGADO: Supervisor intentando aprobar estado '" + estadoActual + "'");
+             return { status: 'error', message: 'Este registro está a la espera del Director Nacional. Supervisores solo pueden aprobar el primer nivel.' };
+      }
+    } 
+    // El Director puede hacer cualquier cosa, no hay restricción para él excepto que el registro esté completado.
+
+    // 5. LÓGICA DE ACTUALIZACIÓN
+    if (estadoNormalizado === 'pendiente supervisor' || estadoNormalizado === '') {
+      // Primer paso: Pendiente -> Director
+      sh.getRange(fila, RESP_I.ESTADO + 1).setValue('Pendiente Director');
+      sh.getRange(fila, RESP_I.APROB_SUPER + 1).setValue(emailUsuario);
+      sh.getRange(fila, RESP_I.FECHA_APROB_SUPER + 1).setValue(new Date());
+      
+      Logger.log("✅ Aprobado Supervisor. Pasando a Pendiente Director.");
+      return { status: 'ok', message: 'Aprobado correctamente (Nivel Supervisor -> Nivel Director).' };
+      
+    } else if (estadoNormalizado === 'pendiente director') {
+      // Segundo paso: Director -> Aprobado
+      // Validamos que solo Director llegue aquí (Ya hecho arriba por el IF del supervisor, pero doble check):
+      if (rolUsuario !== 'director') {
+         Logger.log("❌ NEGADO: Supervisor intentando aprobar nivel Director.");
+         return { status: 'error', message: 'Error Crítico: Solo el Director Nacional puede dar la aprobación final.' };
+      }
+
+      sh.getRange(fila, RESP_I.ESTADO + 1).setValue('Aprobado');
+      sh.getRange(fila, RESP_I.APROB_DIR + 1).setValue(emailUsuario);
+      sh.getRange(fila, RESP_I.FECHA_APROB_DIR + 1).setValue(new Date());
+      
+      Logger.log("✅ Aprobado Director. Registro finalizado.");
+      return { status: 'ok', message: 'Aprobación final completada.' };
+      
+    } else if (estadoNormalizado === 'aprobado') {
+      Logger.log("⚠️ Registro ya aprobado anteriormente.");
+      return { status: 'error', message: 'Este registro ya se encuentra aprobado.' };
+    } else {
+      Logger.log("❌ Estado desconocido: " + estadoActual);
+      return { status: 'error', message: 'Estado del registro inválido: ' + estadoActual + '.' };
+    }
 
   } catch (e) {
-    return { status: 'error', message: 'Error: ' + e.toString() };
+    Logger.log("❌ Error en aprobarHorasExtras: " + e.toString());
+    return { status: 'error', message: 'Error interno: ' + e.toString() };
   } finally {
     lock.releaseLock();
   }
