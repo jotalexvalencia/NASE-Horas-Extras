@@ -13,14 +13,14 @@
  *   - 🗺️ **Comparación de APIs:** Consulta simultáneamente Maps.co y Nominatim
  *     para ver cuál devuelve mejor información (Ciudad/Dirección).
  *   - 🔍 **Diagnóstico de Datos:** Inspecciona la hoja "Respuestas" para verificar
- *     que las fechas se guarden como "Strings" (dd/mm/yyyy) y no como "Objects" Date
+ *     que las fechas se guardan como "Strings" (dd/mm/yyyy) y no como "Objects" Date
  *     de Google Sheets (esto evita errores de visualización o fuso horario).
  *   - 🛡️ **Pruebas de Lógica:** Verifica la lógica de secuencias (Entrada->Salida).
  *
  * @usage
  *   Estas funciones están diseñadas para ejecutarse **manualmente desde el Editor de Script**
  *   (Run) o desde una función personalizada. No se recomienda asignarlas a un Trigger
- *   automático por la carga masiva que generan.
+ *   automático por la carga masiva que generarán.
  *
  * @author NASE Team
  * @version 1.0 (Unificado)
@@ -167,8 +167,8 @@ function registrarSimulado(hoja, emp) {
       emp.lat,
       emp.lng,
       emp.acepto,
-      '', '', '', '', '', // Columnas vacías (Geo, Obs, etc.)
-      '', '', '', ''  // Más columnas vacías
+      '', '', '', '', '', '', '', '',  // Columnas vacías (Geo, Obs, etc.)
+      '', '', ''  // Más columnas vacías
       // Fecha y Hora Entrada/Salida (se dejan vacíos en esta versión simple,
       // pero se inyectan a continuación si se requiere precisión de fecha simulada)
     ]);
@@ -341,7 +341,7 @@ function testClaveTmp() {
  * - 1. Intenta validar una 'salida' cuando es la primera vez (Fallo esperado).
  * - 2. Valida una 'entrada' cuando es la primera vez (Éxito esperado).
  */
-function testSecuenciaCorregida() {
+function testSecuenciaCorrecta() {
   const cedula = '12345678';
   
   // Test 1: Intentar salir sin haber entrado (Primera vez -> Debe fallar)
@@ -381,7 +381,7 @@ function testConsulta() {
     const sh = ss.getSheetByName('Respuestas');
     
     if (!sh) {
-      Logger.log("❌ Hoja 'Respuestas' no encontrada");
+      Logger.log("❌ La hoja 'Respuestas' no fue encontrada");
       return;
     }
     
@@ -411,7 +411,7 @@ function testConsulta() {
         // Si intentamos hacer row[14].split('/') en el backend sin convertir,
         // el sistema se romperá.
         if (tipoFecha === 'object') {
-           Logger.log(`    ⚠️ ADVERTENCIA: La fecha es un OBJETO DATE nativo. Esto puede causar problemas con .split('/')`);
+           Logger.log(`    ⚠️ ADVERTENCIA: La fecha es un OBJETO DATE nativo. Esto puede causar problemas con .split('/').`);
            Logger.log(`    Intentando convertirlo manualmente a dd/mm/yyyy...`);
            const manualStr = Utilities.formatDate(rawFecha, TZ, "dd/MM/yyyy");
            Logger.log(`    Resultado conversión: "${manualStr}"`);
