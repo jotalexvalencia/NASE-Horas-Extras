@@ -123,6 +123,9 @@ function doGet(e) {
   var emailUsuario = Session.getActiveUser().getEmail();
   var page = e.parameter.page || 'form';
 
+  // -----------------------------------------------------------------
+  // PÁGINA 1: CONSULTA (Solo Supervisores/Directores)
+  // -----------------------------------------------------------------
   if (page === 'consulta') {
     if (PERMISOS_CONSULTA.indexOf(emailUsuario) === -1 && PERMISOS_DIRECTOR.indexOf(emailUsuario) === -1) {
       return generarPaginaAccesoDenegado(emailUsuario, "Consulta Horas Extras");
@@ -131,9 +134,13 @@ function doGet(e) {
       .evaluate()
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1.0')
-      .setTitle('NASE - Consulta Horas Extras'); // TÍTULO ACTUALIZADO
+      .setTitle('NASE - Consulta Horas Extras');
 
-  } else if (page === 'asistencia') {
+  } 
+  // -----------------------------------------------------------------
+  // PÁGINA 2: ASISTENCIA (Solo Directores/RRHH)
+  // -----------------------------------------------------------------
+  else if (page === 'asistencia') {
     if (PERMISOS_ASISTENCIA.indexOf(emailUsuario) === -1) {
       return generarPaginaAccesoDenegado(emailUsuario, "Nómina y Asistencia");
     }
@@ -142,28 +149,44 @@ function doGet(e) {
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1.0')
       .setTitle('NASE - Consulta Asistencia');
+  } 
+  
+  // -----------------------------------------------------------------
+  // ❌ ELIMINADO: BLOQUE 'ACTUALIZAR_CENTROS'
+  // Ya no necesitamos este bloque porque estamos leyendo los centros
+  // directamente del libro externo en la función 'getCentrosData' arriba.
+  // -----------------------------------------------------------------
 
-  } else if (page === 'actualizar_centros') {
-    if (PERMISOS_CENTROS.indexOf(emailUsuario) === -1) {
-      return generarPaginaAccesoDenegado(emailUsuario, "Actualización de Centros");
-    }
-    return doGetActualizarCentrosPublico(e);
-
-  } else {
-    // PÁGINA FORM (Registro Horas Extras)
+  // -----------------------------------------------------------------
+  // PÁGINA 3: FORMULARIO (Registro de Entradas/Salidas) - PÁGINA POR DEFECTO
+  // -----------------------------------------------------------------
+  else {
+    // Esta es la página que carga si escribes la URL sin ?page=...
+    // Carga el form.html y le inyecta los centros.
+    
     const template = HtmlService.createTemplateFromFile('form');
     try {
+      // Llamamos a getCentrosData (que ya tiene la lógica del libro externo)
       const dataObj = getCentrosData();
+      
+      // Estructurar datos para el HTML
       const structured = (dataObj && dataObj.structured) ? dataObj.structured : {};
       const centrosJson = JSON.stringify(structured);
+      
+      // Inyectar en la plantilla
+      // replace reemplaza barras invertidas dobles para evitar errores JSON
       template.centrosInyectados = centrosJson.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      
     } catch (err) {
+      // Si falla la carga de centros, inyectar vacío para no romper la página
+      Logger.log("Error cargando centros en doGet: " + err);
       template.centrosInyectados = "{}";
     }
+    
     return template.evaluate()
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1.0')
-      .setTitle('NASE - Registro Horas Extras'); // TÍTULO ACTUALIZADO
+      .setTitle('NASE - Registro Horas Extras');
   }
 }
 
@@ -537,39 +560,76 @@ function buscarEmpleadoPorCedulaEnLibro(cedula) {
 // -------------------------------------------------------------------
 // 5. CENTROS
 // -------------------------------------------------------------------
+// ===================================================================
+// 2. DATOS DE CENTROS (Leer de Libro Externo)
+// ===================================================================
+
+/**
+ * @summary Obtiene los datos de centros del libro principal.
+ * @description En lugar de buscar en la hoja actual, abre el libro
+ *              externo (ID_LIBRO_CENTROS) y lee la hoja "Centros".
+ *              Esto evita duplicar hojas y permite centralizar los datos.
+ * 
+ * @returns {Object} Estructura JSON para el formulario.
+ */
 function getCentrosData() {
-  if (centrosDataCache && (Date.now() - ultimaActualizacionCache < CACHE_LOCAL_DURATION)) return centrosDataCache;
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-  const sh = ss.getSheetByName(SHEET_CENTROS);
-  if (!sh) return { structured: {} };
-  const data = sh.getDataRange().getValues();
-  if (!data || data.length < 2) return { structured: {} };
-  const headers = data[0].map(function(h) { return String(h).trim().toUpperCase(); });
-  const idxCiudad = headers.findIndex(function(h) { return h.includes('CIUDAD'); });
-  const idxCentro = headers.findIndex(function(h) { return h === 'CENTRO' || h.includes('SEDE'); });
-  const idxLat = headers.findIndex(function(h) { return h.includes('LAT'); });
-  const idxLng = headers.findIndex(function(h) { return h.includes('LNG') || h.includes('LON') || h.includes('LONG'); });
-  const idxRadio = headers.findIndex(function(h) { return h.includes('RADIO'); });
-  const idxUrlImagen = headers.findIndex(function(h) { return h.includes('LINK_IMAGEN'); });
-  if (idxLat === -1 || idxLng === -1) return { structured: {} };
-  const structured = {};
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    const ciudad = String(row[idxCiudad] || '').trim();
-    const centro = String(row[idxCentro] || '').trim();
-    if (!ciudad || !centro) continue;
-    let latVal = parseFloat(String(row[idxLat] || '').replace(',', '.'));
-    let lngVal = parseFloat(String(row[idxLng] || '').replace(',', '.'));
-    if (isNaN(latVal) || isNaN(lngVal)) continue;
-    let radioFinal = RADIO_DEFAULT;
-    if (idxRadio > -1) { const r = parseFloat(String(row[idxRadio] || '').replace(',', '.')); if (!isNaN(r) && r > 0) radioFinal = r; }
-    const key = normaliza(ciudad) + '|' + normaliza(centro);
-    const centroObj = { ciudad: ciudad, centro: centro, lat: latVal, lng: lngVal, radio: radioFinal };
-    structured[key] = centroObj;
+  // ID del libro MAESTRO donde se gestionan los Centros (Base Operativa)
+  const ID_LIBRO_CENTROS = "1PchIxXq617RRL556vHui4ImG7ms2irxiY3fPLIoqcQc";
+  
+  try {
+    // 1. Abrir el libro EXTERNO (Conexión Remota)
+    const ssExterno = SpreadsheetApp.openById(ID_LIBRO_CENTROS);
+    
+    // 2. Buscar la hoja "Centros" en ese libro
+    const hojaCentros = ssExterno.getSheetByName("Centros");
+    
+    if (!hojaCentros) {
+      Logger.log("⚠️ No se encontró la hoja 'Centros' en el libro externo: " + ID_LIBRO_CENTROS);
+      return { structured: [], data: [] }; // Retorno vacío seguro
+    }
+
+    // 3. Leer datos (Toda la hoja)
+    const data = hojaCentros.getDataRange().getValues();
+    
+    if (!data || data.length < 2) {
+      return { structured: [], data: [] };
+    }
+
+    // 4. Normalizar Datos (Estructura para el Formulario HTML)
+    // El formulario espera: structured: [ { ciudad: '...', centro: '...' } ]
+    const headers = data[0];
+    const rows = data.slice(1);
+    
+    // Mapear índices (Búsqueda segura)
+    const idxCiudad = headers.findIndex(h => h.toString().toUpperCase().includes('CIUDAD'));
+    const idxCentro = headers.findIndex(h => h.toString().toUpperCase().includes('CENTRO') || h.toString().toUpperCase().includes('SEDE'));
+    
+    // Generar array estructurado
+    const structuredData = [];
+    
+    for (let i = 0; i < rows.length; i++) {
+      const ciudad = rows[i][idxCiudad] ? rows[i][idxCiudad].toString().trim() : "";
+      const centro = rows[i][idxCentro] ? rows[i][idxCentro].toString().trim() : "";
+      
+      if (ciudad && centro) {
+        structuredData.push({
+          ciudad: ciudad,
+          centro: centro
+        });
+      }
+    }
+
+    // 5. Retornar datos al Frontend
+    return {
+      structured: structuredData, // Para el Select del Formulario
+      data: data                // Para otras lógicas si es necesario
+    };
+
+  } catch (e) {
+    Logger.log("❌ Error leyendo centros del libro externo: " + e.toString());
+    // Si falla la lectura externa, devolvemos vacío para no romper el formulario
+    return { structured: [], data: [] };
   }
-  centrosDataCache = { structured: structured };
-  ultimaActualizacionCache = Date.now();
-  return centrosDataCache;
 }
 
 // ===================================================================
