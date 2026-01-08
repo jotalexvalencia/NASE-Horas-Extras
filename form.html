@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
-  <title>NASE - Registro Horas Extras</title> <!-- TÍTULO ACTUALIZADO -->
+  <title>NASE - Registro Horas Extras</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -29,38 +29,36 @@
     .card-option { border: 2px solid #e9ecef; border-radius: 16px; transition: all 0.2s; }
     .card-option:active { transform: scale(0.98); }
     .card-option.border-success { border-color: #198754 !important; background-color: #f0fff4; border-width: 3px; }
+    /* NUEVO: Indicador de tipo sugerido */
+    .tipo-sugerido { background: #e8f5e9; border: 2px solid #4caf50; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; }
+    .tipo-sugerido.warning { background: #fff3e0; border-color: #ff9800; }
     @media screen and (orientation: portrait) { .camera-box { height: 400px; } #photoPreview { max-height: 500px; } }
     @media screen and (orientation: landscape) { .camera-box { height: 250px; } #photoPreview { max-height: 300px; } }
     @media (max-width: 576px) { .camera-box { height: 300px; } #photoPreview { max-height: 400px; } }
   </style>
 </head>
 <body>
-  <!-- INYECCIÓN DE DATOS -->
   <script>
     var DATA_CENTROS = (function(){
-      try {
-        return JSON.parse('<?!= centrosInyectados ?>') || {};
-      } catch(e) {
-        console.warn("Centros no cargados", e);
-        return {};
-      }
+      try { return JSON.parse('<?!= centrosInyectados ?>') || {}; } 
+      catch(e) { console.warn("Centros no cargados", e); return {}; }
     })();
   </script>
 
-  <!-- PANTALLAS -->
   <div class="app-card">
+    <!-- PANTALLA 0: INICIO -->
     <div id="screen0">
       <div>
         <img src="https://raw.githubusercontent.com/jotalexvalencia/NASE/main/Logo_Nase.png" alt="NASE" class="logo">
-        <!-- TEXTO ACTUALIZADO -->
         <div class="welcome-text">Control de Horas Extras<br>Inicie su marcación<br>de entrada o salida.</div>
-        <button class="btn btn-success btn-arrow" onclick="showScreen(1)">
+        <button class="btn btn-success btn-arrow" onclick="irAPantalla(1)">
           <span>Iniciar</span>
           <svg width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/></svg>
         </button>
       </div>
     </div>
 
+    <!-- PANTALLA 1: FOTO -->
     <div id="screen1" style="display:none">
       <div>
         <div class="step-guide">1</div>
@@ -77,6 +75,7 @@
       </div>
     </div>
 
+    <!-- PANTALLA 2: CÉDULA -->
     <div id="screen2" style="display:none">
       <div>
         <div class="step-guide">2</div>
@@ -89,16 +88,19 @@
         </div>
         <div id="statusBusqueda" class="small text-muted mb-2" style="display:none;">Buscando…</div>
         <div id="infoEmpleado" style="display:none; margin-bottom:20px; padding:16px; background:#f8f9fa; border-radius:12px; font-size:16px;"></div>
-        <button class="btn btn-success w-100 d-flex align-items-center justify-content-center" id="nextAfterCedula" disabled onclick="showScreen(3)">
+        <button class="btn btn-success w-100 d-flex align-items-center justify-content-center" id="nextAfterCedula" disabled onclick="irAPantalla(3)">
           Siguiente <svg width="20" height="20" fill="currentColor" class="ms-2" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/></svg>
         </button>
       </div>
     </div>
 
+    <!-- PANTALLA 3: ENTRADA/SALIDA -->
     <div id="screen3" style="display:none">
       <div>
         <div class="step-guide">3</div>
         <h5>Marque<br>Entrada o Salida</h5>
+        <!-- NUEVO: Indicador de tipo sugerido -->
+        <div id="tipoSugeridoMsg" class="tipo-sugerido" style="display:none;"></div>
         <div class="row g-3 mb-4">
           <div class="col-6">
             <div class="card text-center p-3 card-option" onclick="selectTipo('Entrada')" style="cursor:pointer" id="cardEntrada">
@@ -119,12 +121,14 @@
             </div>
           </div>
         </div>
-        <button class="btn btn-success w-100 d-flex align-items-center justify-content-center" onclick="showScreen(4)">
+        <!-- OPTIMIZADO: Pasa directo a pantalla 4, sin validación -->
+        <button class="btn btn-success w-100 d-flex align-items-center justify-content-center" onclick="irAPantalla(4)">
           Siguiente <svg width="20" height="20" fill="currentColor" class="ms-2" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/></svg>
         </button>
       </div>
     </div>
 
+    <!-- PANTALLA 4: UBICACIÓN -->
     <div id="screen4" style="display:none">
       <div>
         <div class="step-guide">4</div>
@@ -139,7 +143,7 @@
           Al marcar el botón verde acepta la política de tratamiento de datos de Nase Colombia.<br>
           <a href="https://nasecolombia.com/wp-content/uploads/2024/06/PO-GH-001-6-POLITICA-PROTECCION-DE-DATOS-NASE.pdf" target="_blank" style="color:#0b6efd;text-decoration:none;font-weight:bold;">Descargar política completa</a>
         </div>
-        <button class="btn btn-success w-100 d-flex align-items-center justify-content-center" onclick="intentarEnviarRegistro()" style="height: 64px; font-size: 19px !important;">
+        <button class="btn btn-success w-100 d-flex align-items-center justify-content-center" onclick="enviarRegistro()" style="height: 64px; font-size: 19px !important;">
           Registrar <svg width="24" height="24" fill="currentColor" class="ms-2" viewBox="0 0 16 16"><path d="M8.97 1.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 1 1-1.08.02L2.324 9.12a.75.75 0 1 1 1.06-1.06l2.94 2.939L8.97 2.03a.75.75 0 1 1 1.05 0z"/></svg>
         </button>
       </div>
@@ -147,64 +151,35 @@
   </div>
 
   <script>
+    // =====================================================
     // VARIABLES GLOBALES
-    let fotoBase64 = '', fotoUrl = '';
-    let currentPosition = null;
-    let ciudadDetectada = '', centroDetectado = null;
-    let currentStream = null;
-    let videoWidth = 480, videoHeight = 640;
-    let isUploading = false, pendingRegistration = false;
+    // =====================================================
+    var fotoBase64 = '', fotoUrl = '';
+    var currentPosition = null;
+    var ciudadDetectada = '', centroDetectado = null;
+    var currentStream = null;
+    var isUploading = false;
+    var tipoSugerido = null; // NUEVO: Guardamos el tipo sugerido
 
-    // NAVEGACIÓN
-    function showScreen(n) {
+    // =====================================================
+    // NAVEGACIÓN SIMPLIFICADA (SIN VALIDACIÓN REDUNDANTE)
+    // =====================================================
+    function irAPantalla(n) {
+      // Validaciones básicas locales (sin llamar al servidor)
       if (n === 4) {
-        const ced = document.getElementById('cedula').value.trim();
-        const tipoSelectedInput = document.querySelector('[name="tipo"]:checked');
-        const tipoSeleccionado = tipoSelectedInput ? tipoSelectedInput.value : null;
-
+        var ced = document.getElementById('cedula').value.trim();
+        var tipoInput = document.querySelector('[name="tipo"]:checked');
+        
         if (!ced) {
-          Swal.fire('⚠️ Ingresa tu cédula', '', 'warning');
+          mostrarToast('⚠️ Ingresa tu cédula', 'warning');
           return;
         }
-
-        if (!tipoSeleccionado) {
-          Swal.fire('⚠️ Selecciona Entrada o Salida', '', 'warning');
+        if (!tipoInput) {
+          mostrarToast('⚠️ Selecciona Entrada o Salida', 'warning');
           return;
         }
-
-        Swal.fire({
-          title: 'Validando secuencia...',
-          allowOutsideClick: false,
-          didOpen: function() { Swal.showLoading(); }
-        });
-
-        google.script.run
-          .withSuccessHandler(function(res) {
-            Swal.close();
-            if (res.esValido) {
-              cambiarPantalla(4);
-            } else {
-              Swal.fire({
-                icon: 'error',
-                title: 'Secuencia incorrecta',
-                html: '<p style="font-size:16px;margin-bottom:15px;">' + res.message + '</p><p style="color:#666;font-size:14px;">Por favor selecciona: <strong style="color:#0b6efd;">' + (res.tipoSugerido === 'entrada' ? 'ENTRADA' : 'SALIDA') + '</strong></p>',
-                confirmButtonText: 'Entendido',
-                confirmButtonColor: '#0b6efd'
-              }).then(function() {
-                if (res.tipoSugerido) {
-                  selectTipo(res.tipoSugerido === 'entrada' ? 'Entrada' : 'Salida');
-                }
-              });
-            }
-          })
-          .withFailureHandler(function(err) {
-            Swal.close();
-            Swal.fire('❌ Error de conexión', err.message, 'error');
-          })
-          .validarSecuenciaFront(ced, tipoSeleccionado.toLowerCase());
-
-        return;
       }
+      
       cambiarPantalla(n);
     }
 
@@ -214,21 +189,49 @@
         screens[i].style.display = 'none';
       }
       document.getElementById('screen' + n).style.display = 'block';
+      
       if (n === 1) startCameraLive();
       if (n === 2) setTimeout(function() { document.getElementById('cedula').focus(); }, 300);
       if (n === 3) warmUpGPS();
     }
 
+    // =====================================================
+    // TOAST RÁPIDO (Reemplaza SweetAlert para mensajes simples)
+    // =====================================================
+    function mostrarToast(mensaje, tipo) {
+      Swal.fire({
+        toast: true,
+        position: 'top',
+        icon: tipo || 'info',
+        title: mensaje,
+        showConfirmButton: false,
+        timer: 2000,
+        timerProgressBar: true
+      });
+    }
+
+    // =====================================================
     // CÁMARA
+    // =====================================================
     function warmUpGPS() {
       if (!navigator.geolocation) return;
-      navigator.geolocation.getCurrentPosition(function(pos) { currentPosition = pos; }, function() {}, {enableHighAccuracy: true, maximumAge: 60000, timeout: 10000});
+      navigator.geolocation.getCurrentPosition(
+        function(pos) { currentPosition = pos; }, 
+        function() {}, 
+        {enableHighAccuracy: true, maximumAge: 60000, timeout: 10000}
+      );
     }
 
     function startCameraLive() {
       var video = document.getElementById('cameraVideo');
       var isPortrait = window.innerHeight > window.innerWidth;
-      var constraints = { video: { facingMode: 'user', width: isPortrait ? {ideal: 480} : {ideal: 640}, height: isPortrait ? {ideal: 640} : {ideal: 480} } };
+      var constraints = { 
+        video: { 
+          facingMode: 'user', 
+          width: isPortrait ? {ideal: 480} : {ideal: 640}, 
+          height: isPortrait ? {ideal: 640} : {ideal: 480} 
+        } 
+      };
       
       navigator.mediaDevices.getUserMedia(constraints)
         .then(function(stream) { 
@@ -237,61 +240,73 @@
           video.play(); 
         })
         .catch(function() { 
-          Swal.fire({icon: 'error', title: 'Cámara no disponible', text: 'Por favor, permita el acceso a la cámara en su dispositivo.', confirmButtonText: 'Entendido'}); 
+          mostrarToast('📷 Permite el acceso a la cámara', 'error');
         });
     }
 
     function takePhoto() {
       fotoUrl = ''; 
-      isUploading = true; 
-      pendingRegistration = false;
-      document.getElementById('photoStatus').textContent = 'Subiendo en segundo plano...';
+      isUploading = true;
+      document.getElementById('photoStatus').textContent = '⏳ Subiendo...';
       
       var video = document.getElementById('cameraVideo');
       var canvas = document.createElement('canvas');
       canvas.width = video.videoWidth; 
       canvas.height = video.videoHeight;
-      var ctx = canvas.getContext('2d'); 
-      
-      ctx.drawImage(video, 0, 0);
+      canvas.getContext('2d').drawImage(video, 0, 0);
       
       fotoBase64 = canvas.toDataURL('image/jpeg', 0.7);
       
       var preview = document.getElementById('photoPreview');
       preview.src = fotoBase64; 
       preview.style.display = 'block';
-      
       document.getElementById('cameraBox').classList.add('photo-taken');
       
+      // Detener cámara
       if (currentStream) { 
-        var tracks = currentStream.getTracks();
-        for (var t = 0; t < tracks.length; t++) {
-          tracks[t].stop(); 
-        }
+        currentStream.getTracks().forEach(function(t) { t.stop(); });
         currentStream = null; 
       }
       
-      showScreen(2);
+      // Ir a siguiente pantalla inmediatamente
+      irAPantalla(2);
       
-      google.script.run.withSuccessHandler(function(url) {
-        fotoUrl = (url && url !== 'Error al subir foto') ? url : ''; 
-        isUploading = false;
-        document.getElementById('photoStatus').textContent = fotoUrl ? '✅ Foto lista' : '⚠️ Error';
-        
-        if (pendingRegistration) enviarRegistroReal();
-      }).subirFoto(fotoBase64, document.getElementById('cedula').value.trim() || ('temp_' + Date.now()));
+      // Subir foto en background
+      var cedTemp = document.getElementById('cedula').value.trim() || ('temp_' + Date.now());
+      google.script.run
+        .withSuccessHandler(function(url) {
+          fotoUrl = (url && url !== 'Error al subir foto') ? url : ''; 
+          isUploading = false;
+          document.getElementById('photoStatus').textContent = fotoUrl ? '✅ Foto lista' : '⚠️ Error';
+        })
+        .withFailureHandler(function() {
+          isUploading = false;
+          document.getElementById('photoStatus').textContent = '⚠️ Error';
+        })
+        .subirFoto(fotoBase64, cedTemp);
     }
 
-    // CÉDULA
+    // =====================================================
+    // BÚSQUEDA DE EMPLEADO + TIPO SUGERIDO (OPTIMIZADO)
+    // =====================================================
     document.addEventListener('DOMContentLoaded', function() {
-      document.getElementById('cedula').addEventListener('input', function() { this.value = this.value.replace(/[^0-9]/g, ''); });
+      document.getElementById('cedula').addEventListener('input', function() { 
+        this.value = this.value.replace(/[^0-9]/g, ''); 
+      });
       
+      // Enter para buscar
+      document.getElementById('cedula').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') buscarEmpleado();
+      });
+      
+      // Click en preview para ampliar
       document.getElementById('photoPreview').addEventListener('click', function() {
         if (!this.src) return;
         var modal = document.createElement('div');
         modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1000;display:flex;justify-content:center;align-items:center;cursor:pointer';
         var img = document.createElement('img');
-        img.src = this.src; img.style.cssText = 'max-width:90%;max-height:90%;border-radius:8px';
+        img.src = this.src; 
+        img.style.cssText = 'max-width:90%;max-height:90%;border-radius:8px';
         modal.appendChild(img); 
         document.body.appendChild(modal);
         modal.onclick = function() { document.body.removeChild(modal); };
@@ -312,46 +327,78 @@
       info.style.display = 'none'; 
       nextBtn.disabled = true;
 
-      google.script.run.withSuccessHandler(function(res) {
-        btn.disabled = false; 
-        status.style.display = 'none';
-        var cargo = res.cargo ? res.cargo : '';
-        var centro = res.centro ? res.centro : '';
-        info.innerHTML = res.ok ? '<strong>' + res.nombre + '</strong><br>' + cargo + '<br>' + centro : '<span class="text-warning fw-bold" style="color:#d63384 !important;">⚠️ No encontrado. Se registrará como desconocido.</span>';
-        info.style.display = 'block'; 
-        nextBtn.disabled = false;
-      }).withFailureHandler(function() {
-        btn.disabled = false; 
-        status.style.display = 'none'; 
-        info.innerHTML = '<span class="text-danger">❌ Error conexión</span>'; 
-        info.style.display = 'block';
-      }).buscarEmpleadoPorCedula(ced);
+      // OPTIMIZADO: Buscar empleado Y obtener tipo sugerido en paralelo
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false; 
+          status.style.display = 'none';
+          
+          var cargo = res.cargo || '';
+          var centro = res.centro || '';
+          info.innerHTML = res.ok 
+            ? '<strong>' + res.nombre + '</strong><br>' + cargo + '<br>' + centro 
+            : '<span style="color:#d63384;">⚠️ No encontrado. Se registrará como desconocido.</span>';
+          info.style.display = 'block'; 
+          nextBtn.disabled = false;
+        })
+        .withFailureHandler(function() {
+          btn.disabled = false; 
+          status.style.display = 'none'; 
+          info.innerHTML = '<span class="text-danger">❌ Error conexión</span>'; 
+          info.style.display = 'block';
+        })
+        .buscarEmpleadoPorCedula(ced);
+
+      // NUEVO: Obtener tipo sugerido en paralelo (no bloquea)
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (res && res.ok) {
+            tipoSugerido = res.tipoSugerido;
+            
+            // Pre-seleccionar automáticamente
+            if (tipoSugerido === 'entrada') {
+              selectTipo('Entrada');
+            } else if (tipoSugerido === 'salida') {
+              selectTipo('Salida');
+            }
+            
+            // Mostrar mensaje en pantalla 3
+            var msgEl = document.getElementById('tipoSugeridoMsg');
+            if (res.mensaje) {
+              msgEl.innerHTML = '💡 ' + res.mensaje;
+              msgEl.style.display = 'block';
+            }
+          }
+        })
+        .obtenerUltimoTipoRegistro(ced);
     }
 
-    // TIPO
+    // =====================================================
+    // SELECCIÓN DE TIPO
+    // =====================================================
     function selectTipo(tipo) {
-      var radios = document.querySelectorAll('[name="tipo"]');
-      for (var i = 0; i < radios.length; i++) {
-        radios[i].checked = false;
-      }
-      var targetRadioId = tipo === 'Entrada' ? 'entradaRadio' : 'salidaRadio';
-      document.getElementById(targetRadioId).checked = true;
+      // Limpiar selección anterior
+      document.querySelectorAll('[name="tipo"]').forEach(function(r) { r.checked = false; });
+      document.querySelectorAll('.card-option').forEach(function(c) { c.classList.remove('border-success'); });
       
-      var cards = document.querySelectorAll('[id^="card"]');
-      for (var i = 0; i < cards.length; i++) {
-        cards[i].classList.remove('border-success');
-      }
-      var targetCardId = tipo === 'Entrada' ? 'cardEntrada' : 'cardSalida';
-      document.getElementById(targetCardId).classList.add('border-success');
+      // Seleccionar nuevo
+      var radioId = tipo === 'Entrada' ? 'entradaRadio' : 'salidaRadio';
+      var cardId = tipo === 'Entrada' ? 'cardEntrada' : 'cardSalida';
+      document.getElementById(radioId).checked = true;
+      document.getElementById(cardId).classList.add('border-success');
     }
 
+    // =====================================================
     // GPS
+    // =====================================================
     function calculateDistance(lat1, lon1, lat2, lon2) {
       var R = 6371000;
       var dLat = (lat2 - lat1) * Math.PI / 180;
       var dLon = (lon2 - lon1) * Math.PI / 180;
-      var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-      return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      var a = Math.sin(dLat/2) * Math.sin(dLat/2) + 
+              Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * 
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+      return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
     function getLocationAndCheck() {
@@ -381,7 +428,7 @@
         }
         
         btn.disabled = false; 
-        btn.innerHTML = '<svg width="24" height="24" fill="currentColor" class="me-2" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 0 0-6 3 3 0 1 0 0 6z"/></svg> Actualizar ubicación';
+        btn.innerHTML = '<svg width="24" height="24" fill="currentColor" class="me-2" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 0 0-6 3 3 0 1 0 0 6z"/></svg> Actualizar';
         
         if (closest) {
           centroDetectado = closest.centro; 
@@ -391,7 +438,7 @@
           if (closest.distancia <= radio) {
              status.innerHTML = '<div class="alert alert-success py-2 mb-0">✅ Estás en: <strong>' + closest.centro + '</strong></div>';
           } else {
-             status.innerHTML = '<div class="alert alert-warning py-2 mb-0">📍 Referencia: <strong>' + closest.centro + '</strong> (a ' + Math.round(closest.distancia) + 'm)</div>';
+             status.innerHTML = '<div class="alert alert-warning py-2 mb-0">📍 Ref: <strong>' + closest.centro + '</strong> (' + Math.round(closest.distancia) + 'm)</div>';
           }
         } else { 
           centroDetectado = 'Sin Info'; 
@@ -402,6 +449,7 @@
         document.getElementById('acepto').checked = true;
       };
 
+      // Usar caché si es reciente
       if (currentPosition && (Date.now() - currentPosition.timestamp < 60000)) { 
         processPos(currentPosition); 
         return; 
@@ -419,57 +467,44 @@
       }, 2500);
     }
 
-    // ENVÍO DE REGISTRO
-    function intentarEnviarRegistro() {
+    // =====================================================
+    // ENVÍO DE REGISTRO (SIMPLIFICADO)
+    // =====================================================
+    function enviarRegistro() {
+      // Validaciones locales rápidas
       if (!document.getElementById('acepto').checked) { 
-        Swal.fire('⚠️ Acepta política', '', 'warning'); 
+        mostrarToast('⚠️ Acepta la política', 'warning'); 
         return; 
       }
       
       if (!currentPosition) { 
-        Swal.fire('⚠️ Obtenga ubicación', '', 'warning'); 
+        mostrarToast('⚠️ Obtenga ubicación primero', 'warning'); 
         return; 
       }
       
+      // Esperar foto si aún está subiendo
       if (isUploading) { 
-        pendingRegistration = true; 
-        Swal.fire({
-          title: 'Finalizando...', 
-          text: 'Sincronizando foto...', 
-          allowOutsideClick: false, 
-          didOpen: function() { Swal.showLoading(); }
-        }); 
+        mostrarToast('⏳ Esperando foto...', 'info');
+        setTimeout(enviarRegistro, 500); // Reintentar en 500ms
         return; 
       }
       
-      if (!fotoUrl && !isUploading) { 
-        if (fotoBase64) { 
-          takePhoto(); 
-          pendingRegistration = true; 
-          Swal.fire({
-            title: 'Reintentando...', 
-            didOpen: function() { Swal.showLoading(); }
-          }); 
-        } else { 
-          Swal.fire('⚠️ Falta Foto', '', 'error').then(function() { showScreen(1); }); 
-        } 
+      // Si no hay foto, intentar tomar de nuevo
+      if (!fotoUrl && !fotoBase64) { 
+        mostrarToast('⚠️ Falta la foto', 'error');
+        irAPantalla(1);
         return; 
       }
       
-      enviarRegistroReal();
-    }
-
-    function enviarRegistroReal() {
+      // Preparar datos
       var ced = document.getElementById('cedula').value.trim();
       var tipoInput = document.querySelector('[name="tipo"]:checked');
       var tipo = tipoInput ? tipoInput.value : null;
       
       var infoEl = document.getElementById('infoEmpleado');
       var nombre = 'No encontrado';
-      if (infoEl) {
-         var strongEl = infoEl.querySelector('strong');
-         if (strongEl) nombre = strongEl.textContent;
-      }
+      var strongEl = infoEl ? infoEl.querySelector('strong') : null;
+      if (strongEl) nombre = strongEl.textContent;
       
       var datos = {
         cedula1: ced, 
@@ -481,63 +516,84 @@
         accuracy: currentPosition.coords.accuracy, 
         acepto: true, 
         nombre: nombre, 
-        fotoUrl: fotoUrl
+        fotoUrl: fotoUrl || ''
       };
 
-      Swal.fire({title: 'Enviando...', didOpen: function() { Swal.showLoading(); }});
+      // Mostrar loading mínimo
+      Swal.fire({
+        title: 'Enviando...', 
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        didOpen: function() { Swal.showLoading(); }
+      });
 
-      google.script.run.withSuccessHandler(function(res) {
-        Swal.close();
-        if (res.status === 'ok') {
-          Swal.fire({
-            icon: 'success', 
-            title: '✅ Registro exitoso', 
-            text: res.message, 
-            timer: 2000, 
-            showConfirmButton: false
-          }).then(function() {
-            fotoBase64 = ''; 
-            fotoUrl = ''; 
-            currentPosition = null; 
-            
-            document.getElementById('cedula').value = '';
-            document.getElementById('infoEmpleado').style.display = 'none'; 
-            document.getElementById('nextAfterCedula').disabled = true;
-            
-            document.getElementById('photoStatus').textContent = ''; 
-            document.getElementById('locationStatus').innerHTML = '';
-            
-            document.getElementById('photoPreview').style.display = 'none'; 
-            document.getElementById('cameraBox').classList.remove('photo-taken');
-            
-            var radios = document.querySelectorAll('[name="tipo"]');
-            for (var r = 0; r < radios.length; r++) {
-              radios[r].checked = false;
-            }
-            var cards = document.querySelectorAll('[id^="card"]');
-            for (var c = 0; c < cards.length; c++) {
-              cards[c].classList.remove('border-success');
-            }
-            
-            showScreen(0);
-          });
-        } else {
+      google.script.run
+        .withSuccessHandler(function(res) {
+          Swal.close();
+          
+          if (res.status === 'ok') {
+            // Éxito - Toast rápido
+            Swal.fire({
+              icon: 'success', 
+              title: '✅ Registrado', 
+              text: res.message, 
+              timer: 1500, 
+              showConfirmButton: false
+            }).then(resetearFormulario);
+          } else {
+            // Error del backend (incluye validación de secuencia)
+            Swal.fire({
+              icon: 'error', 
+              title: 'No permitido', 
+              text: res.message, 
+              confirmButtonText: 'Entendido',
+              confirmButtonColor: '#dc3545'
+            }).then(function() {
+              // Si el error menciona "ENTRADA" o "SALIDA", sugerir el cambio
+              if (res.message && res.message.toLowerCase().includes('entrada')) {
+                selectTipo('Entrada');
+                irAPantalla(3);
+              } else if (res.message && res.message.toLowerCase().includes('salida')) {
+                selectTipo('Salida');
+                irAPantalla(3);
+              }
+            });
+          }
+        })
+        .withFailureHandler(function(err) {
+          Swal.close(); 
           Swal.fire({
             icon: 'error', 
-            title: '❌ Registro no permitido', 
-            text: res.message, 
-            confirmButtonText: 'Entendido'
+            title: 'Error de conexión', 
+            text: 'Intente nuevamente.', 
+            confirmButtonText: 'Reintentar'
           });
-        }
-      }).withFailureHandler(function(err) {
-        Swal.close(); 
-        Swal.fire({
-          icon: 'error', 
-          title: '❌ Error de conexión', 
-          text: 'No se pudo conectar con el servidor. Intente nuevamente.', 
-          confirmButtonText: 'Reintentar'
-        });
-      }).registrarUltra(datos);
+        })
+        .registrarUltra(datos);
+    }
+
+    // =====================================================
+    // RESETEAR FORMULARIO
+    // =====================================================
+    function resetearFormulario() {
+      fotoBase64 = ''; 
+      fotoUrl = ''; 
+      currentPosition = null;
+      tipoSugerido = null;
+      
+      document.getElementById('cedula').value = '';
+      document.getElementById('infoEmpleado').style.display = 'none'; 
+      document.getElementById('nextAfterCedula').disabled = true;
+      document.getElementById('photoStatus').textContent = ''; 
+      document.getElementById('locationStatus').innerHTML = '';
+      document.getElementById('photoPreview').style.display = 'none'; 
+      document.getElementById('cameraBox').classList.remove('photo-taken');
+      document.getElementById('tipoSugeridoMsg').style.display = 'none';
+      
+      document.querySelectorAll('[name="tipo"]').forEach(function(r) { r.checked = false; });
+      document.querySelectorAll('.card-option').forEach(function(c) { c.classList.remove('border-success'); });
+      
+      irAPantalla(0);
     }
   </script>
 </body>
