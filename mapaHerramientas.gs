@@ -19,6 +19,12 @@ function onOpen(e) {
   menu.addSeparator();
   menu.addItem('📊 Generar Asistencia', 'generarTablaAsistenciaSinValores');
   menu.addSeparator();
+  // ---------------------------------------------------------
+  // 5. Configuración
+  // ---------------------------------------------------------
+  // Abre el panel lateral para configurar recargos nocturnos (config_horarios.html)
+  menu.addItem('⚙️ Configurar Horas (Inicio y Fin del Recargo Nocturno)', 'mostrarConfiguracionHorarios');
+  menu.addSeparator();
   menu.addItem('🔑 Configurar API Key OpenCage', 'guardarApiKeyOpenCage');
   menu.addItem('🧪 Probar Geocodificador', 'testGeocodificador');
   menu.addSeparator();
@@ -196,4 +202,30 @@ function formatearHojasEstandar() {
   }
   
   SpreadsheetApp.getUi().alert("✅ Formato aplicado.");
+}
+
+// ======================================================================
+// 5. CONFIGURACIÓN DE HORARIOS
+// ======================================================================
+
+/**
+ * @summary Abre la plantilla de configuración de horarios en un Sidebar.
+ * @description Carga el archivo HTML 'config_horarios' y lo muestra en una barra lateral
+ *              para permitir al administrador configurar recargos salariales nocturnos.
+ * 
+ * @requires 'config_horarios.html' (Plantilla con Inputs de Hora Inicio/Fin).
+ */
+function mostrarConfiguracionHorarios() {
+  // 1. Creamos la plantilla (Template)
+  const template = HtmlService.createTemplateFromFile('config_horarios');
+  
+  // 2. Evaluamos la plantilla (Convierte de Template a Output)
+  // ⚠️ IMPORTANTE: Solo después de .evaluate() existen los métodos .setWidth()
+  const html = template.evaluate()
+    .setWidth(700)  // ✅ Aquí ya no da error "is not a function"
+    .setHeight(600);
+  
+  // 3. Mostramos el Sidebar
+  // ✅ Pasamos solo el HtmlOutput. No pasamos el título como segundo argumento para evitar el error de parámetros.
+  SpreadsheetApp.getUi().showSidebar(html);
 }
